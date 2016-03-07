@@ -1,0 +1,235 @@
+@PointClass size(-32 -8 -16, 32 8 16 ) color(255 106 0) = weapon_custom : "Custom weapon settings"
+[
+	spawnflags(Flags) =
+	[
+		1 : "Can Select If Empty" : 0
+		2 : "No Auto Reload" : 0
+		4 : "No Empty Switch" : 0
+		8 : "Limit In World" : 0
+		16 : "Exhaustible" : 0
+	]
+	
+	targetname(target_source) : "Name"
+	weapon_name(string) : "Weapon Class" : "weapon_test"
+	skin(integer) : "Clip Size (0 = none used)" : 80
+	
+	primary_fire(string) : "Primary Fire (weapon_custom_shoot)"
+	primary_reload_snd(string) : "Primary Reload Sound" : "weapons/gl_reload.wav"
+	primary_empty_snd(string) : "Primary Empty Sound" : "weapons/357_cock1.wav"
+	primary_ammo(string) : "Primary Ammo Type" : "9mm"
+	
+	secondary_fire(string) : "Secondary Fire (weapon_custom_shoot)"
+	secondary_reload_snd(string) : "Secondary Reload Sound" : "weapons/gl_reload.wav"
+	secondary_empty_snd(string) : "Secondary Empty Sound" : "weapons/357_cock1.wav"
+	secondary_ammo(string) : "Secondary Ammo Type" : "ARgrenades"
+	
+	wpn_v_model(string) : "V_Model" : "models/hl/v_9mmar.mdl"
+	wpn_w_model(string) : "W_Model" : "models/hl/w_9mmar.mdl"
+	wpn_p_model(string) : "P_Model" : "models/hl/p_9mmar.mdl"
+	
+	hud_sprite(string) : "HUD Sprite"
+	sprite_directory(string) : "HUD Sprite Info Folder" : "weapon_custom"
+	
+	weapon_slot(choices) : "Weapon Slot" : 3 =
+	[
+		0 : "1 (Melee)"
+		1 : "2 (Pistols)"
+		2 : "3 (Rifles)"
+		3 : "4 (Experimental)"
+		4 : "5 (Throwables)"
+		5 : "6 (Heavy)"
+	]
+	
+	weapon_slot_pos(choices) : "Weapon Slot Position" : -1 =
+	[
+		-1 : "Auto"
+		4 : "5"
+		5 : "6"
+		6 : "7"
+		7 : "8"
+		8 : "9"
+		9 : "10"
+	]
+	weapon_priority(integer) : "Auto Switch Priority" : 5
+]
+
+@PointClass size(-24 -8 -8, 24 8 8 ) color(255 216 0) = weapon_custom_shoot : "Custom weapon shoot event"
+[
+	spawnflags(Flags) =
+	[
+		1 : "Shoot Bullet(s)" : 0
+		2 : "Shoot Projectile" : 0
+		4 : "Shoot Beam" : 0
+		8 : "" : 0
+		16 : "Use Custom Explosion" : 0
+		32 : "Explosive bullets" : 0
+		64 : "No Projectile Gravity" : 0
+		128 : "Works in water" : 0
+		256 : "No Bullet Decals" : 0
+		512 : "Detonate Satchels" : 0
+	]
+	targetname(target_source) : "Name"
+	sounds(string) : "Shoot Sounds" : "weapons/glauncher.wav;weapons/glauncher2.wav"
+	ammo_cost(string) : "Ammo Cost" : "1"
+	cooldown(string) : "Cooldown" : "0.15"
+	recoil(string) : "Recoil" : "2"
+	max_range(string) : "Max Range" : "4096"
+	
+	bullets(integer) : "Bullets" : 1
+	bullet_type(choices) : "Bullet Type (Damage)" : 1 =
+	[
+		1 : "sk_plr_9mm_bullet"
+		2 : "sk_plr_9mmAR_bullet"
+		3 : "sk_556_bullet"
+		4 : "sk_plr_762_bullet"
+		5 : "sk_plr_357_bullet"
+		6 : "sk_plr_357_bullet * 66%"
+		7 : "sk_plr_buckshot"
+		8 : "sk_plr_crowbar"
+		9 : "sk_plr_crowbar * 200%"
+		10: "Custom (Specified Below)"
+		// enumval Bullet BULLET_MONSTER_9MM 11
+		// enumval Bullet BULLET_MONSTER_MP5 12
+		// enumval Bullet BULLET_MONSTER_SAW 13
+		// enumval Bullet BULLET_MONSTER_12MM 14
+		// enumval Bullet BULLET_MONSTER_EAGLE 15
+		// enumval Bullet BULLET_MONSTER_SNIPER 16
+		// enumval Bullet BULLET_MONSTER_BUCKSHOT 17
+	]
+	bullet_damage(string) : "Bullet Custom Damage" : 10
+	bullet_spread(string) : "Bullet Spread (Degrees)" : "6"
+	bullet_spread_func(choices) : "Bullet Spread Function" : 0 =
+	[
+		0 : "Gaussian"
+		1 : "Uniform"
+	]
+	//bullet_delay(string) : "Bullet Burst Fire Delay" : "0"
+	bullet_color(choices) : "Bullet Tracers" : 4 =
+	[
+		-1: "None"
+		4 : "Tan"
+		0 : "White"
+		1 : "Red"
+		2 : "Green"
+		3 : "Blue"
+		7 : "Purple"
+		5 : "Yellow"
+		11 : "Pink"		
+	]
+	
+	projectile_type(choices) : "Projectile" : 0 =
+	[
+		0 : "ARgrenade"
+		1 : "Banana Grenade"
+		2 : "Crossbow Bolt"
+		3 : "Displacer Portal"
+		4 : "Grenade"
+		5 : "Hornet"
+		6 : "HVR Rocket"
+		7 : "Mortar"
+		8 : "RPG Rocket"
+		9 : "Shock Rifle Beam"
+		10 : "Custom"
+		11 : "Other"
+	]
+	projectile_class(string) : "Projectile Entity (Other)"
+	projectile_speed(string) : "Projectile Speed" : "900"
+	projectile_life(string) : "Projectile Life Time" : "4"
+	projectile_mdl(string) : "Projectile Model"
+	projectile_spr(string) : "Projectile Sprite"
+	projectile_trail_spr(string) : "Projectile Trail Sprite"
+	projectile_trail_life(integer) : "Projectile Trail Life (1-255)" : 100
+	projectile_trail_width(integer) : "Projectile Trail Width (1-255)" : 32
+	projectile_trail_color(color255) : "Projectile Trail Color (R G B A)" : "255 255 0 255"
+	projectile_size(string) : "Projectile Hull Size" : "4"
+	projectile_die_event(choices) : "Projectile Custom Life Expired Action" : 0 =
+	[
+		0 : "Disappear"
+		1 : "Explode"
+	]
+	projectile_world_event(choices) : "Projectile Custom Hit World Action" : 0 =
+	[
+		0 : "Disappear"
+		1 : "Explode"
+		2 : "Bounce"
+		3 : "Attach"
+	]
+	projectile_monster_event(choices) : "Projectile Custom Hit Monster Action" : 0 =
+	[
+		0 : "Damage"
+		1 : "Explode"
+		2 : "Bounce"
+		3 : "Attach"
+	]	
+	projectile_bounce(string) : "Projectile Custom Elasticity (0-1)" : "0.9"
+	projectile_impact_dmg(string) : "Projectile Custom Impact Damage" : "100"
+	projectile_impact_snd(string) : "Projectile Custom Impact Sound" : "weapons/pwach.wav"
+	projectile_bounce_snd(string) : "Projectile Custom Bounce Sound" : "weapons/pwach.wav"
+	projectile_bounce_decal(string) : "Projectile Custom Bounce Decal" : ""
+	
+	beam_impact_spr(string) : "Beam Impact Sprite" : "sprites/xspark1.spr"
+	beam_ricochet_limit(integer) : "Beam Ricochet Limit" : 3
+	beam1_type(choices) : "Beam 1 Type" : 0 =
+	[
+		0 : "Linear"
+		1 : "Spiral"
+		2 : "Projectile"
+	]
+	beam1_time(string) : "Beam 1 Duration (0 = constant)" : "0"
+	beam1_spr(string) : "Beam 1 Sprite" : "sprites/laserbeam.spr"
+	beam1_color(color255) : "Beam 1 Color (R G B A)" : "255 0 0 255"
+	beam1_width(integer) : "Beam 1 Width (1-255)" : 8
+	beam1_noise(integer) : "Beam 1 Noise (0-255)" : 32
+	beam1_scroll(integer) : "Beam 1 Scroll Rate (0-255)" : 32
+	
+	beam2_type(choices) : "Beam 2 Type" : -1 =
+	[
+		-1 : "Disabled"
+		0 : "Linear"
+		1 : "Spiral"
+		2 : "Projectile"
+	]
+	beam2_time(string) : "Beam 2 Duration (0 = constant)" : "0"
+	beam2_spr(string) : "Beam 2 Sprite" : "sprites/laserbeam.spr"
+	beam2_color(color255) : "Beam 2 Color (R G B A)" : "0 255 0 255"
+	beam2_width(integer) : "Beam 2 Width (1-255)" : 8
+	beam2_noise(integer) : "Beam 2 Noise (0-255)" : 32
+	beam2_scroll(integer) : "Beam 2 Scroll Rate (0-255)" : 32
+	
+	explosion_style(choices) : "Custom Explosion Style" : 0 =
+	[
+		0 : "Sprite"
+		1 : "Disk"
+		2 : "Cylinder"
+		3 : "Torus"
+	]
+	explode_mag(string) : "Custom Explosion Size" : "100"
+	explode_dmg(string) : "Custom Explosion Damage" : "100"
+	explode_spr(string) : "Custom Explosion Sprite" : "sprites/fexplo.spr"
+	explode_snd(string) : "Custom Explosion Sound" : "weapons/mortarhit.wav"
+	explode_decal(string) : "Custom Explosion Decal" : "{handi"
+	explode_smoke_spr(string) : "Custom Explosion Smoke Sprite" : "sprites/steam1.spr"
+	explode_dlight(color255) : "Custom Explosion Light (R G B D)" : "0 255 0 200"
+	explode_gibs(integer) : "Custom Explosion Gibs (0-255)" : 8
+	explode_gib_model(string) : "Custom Explosion Gib Model/Sprite" : "models/hgibs.mdl"
+	explode_gib_mat(choices) : "Custom Explosion Gib Material" : 0 =
+	[
+		0 : "None"
+		1 : "Glass"
+		2 : "Metal"
+		4 : "Flesh"
+		8 : "Wood"
+		64 : "Rock"
+	]
+
+	rico_angle(string) : "Ricochet Max Angle (Degrees)" : "0"
+	rico_snds(string) : "Ricochet Sounds" : "weapons/ric1.wav;weapons/ric2.wav;weapons/ric3.wav;weapons/ric4.wav;weapons/ric5.wav"
+	rico_decal(string) : "Ricochet Decal" : "{handi"
+	rico_part_count(integer) : "Ricochet Particle Count" : 3
+	rico_part_spr(string) : "Ricochet Particle Sprite" : "sprites/hotglow.spr"
+	rico_part_scale(integer) : "Ricochet Particle Scale (1-255)" : 1
+	rico_part_speed(integer) : "Ricochet Particle Speed (0-255)" : 32
+	rico_trace_count(integer) : "Ricochet Tracers" : 3
+	rico_trace_color(integer) : "Ricochet Tracer Color (0-255)" : 4
+	rico_trace_speed(integer) : "Ricochet Tracer Speed (0-6000)" : 1024
+]
