@@ -74,6 +74,28 @@ array<float> rotationMatrix(Vector axis, float angle)
 	return mat;
 }
 
+// create rotation matrix from euler angles
+array<float> eulerMatrix(Vector angles)
+{
+	angles.x = Math.DegreesToRadians(angles.x);
+	angles.y = Math.DegreesToRadians(angles.y);
+	angles.z = Math.DegreesToRadians(-angles.z);
+	float ch = cos(angles.x);
+    float sh = sin(angles.x);
+    float ca = cos(angles.y);
+    float sa = sin(angles.y);
+    float cb = cos(angles.z);
+    float sb = sin(angles.z);
+ 
+	array<float> mat = {
+		ch * ca, sh*sb - ch*sa*cb, ch*sa*sb + sh*cb,  0.0,
+		sa,      ca*cb,            -ca*sb,            0.0,
+		-sh*ca,  sh*sa*cb + ch*sb, -sh*sa*sb + ch*cb, 0.0,
+		0.0,     0.0,              0.0,			      1.0
+	};
+	return mat;
+}
+
 // multiply a matrix with a vector (assumes w component of vector is 1.0f) 
 Vector matMultVector(array<float> rotMat, Vector v)
 {
@@ -82,6 +104,140 @@ Vector matMultVector(array<float> rotMat, Vector v)
 	outv.y = rotMat[1]*v.x + rotMat[5]*v.y + rotMat[9]*v.z  + rotMat[13];
 	outv.z = rotMat[2]*v.x + rotMat[6]*v.y + rotMat[10]*v.z + rotMat[14];
 	return outv;
+}
+
+// http://stackoverflow.com/questions/1148309/inverting-a-4x4-matrix
+// TODO: Only 3x3 inversion is needed
+array<float> invertMatrix(array<float> m)
+{
+	array<float> inv(16);
+
+	inv[0] = m[5]  * m[10] * m[15] - 
+		m[5]  * m[11] * m[14] - 
+		m[9]  * m[6]  * m[15] + 
+		m[9]  * m[7]  * m[14] +
+		m[13] * m[6]  * m[11] - 
+		m[13] * m[7]  * m[10];
+
+	inv[4] = -m[4]  * m[10] * m[15] + 
+		m[4]  * m[11] * m[14] + 
+		m[8]  * m[6]  * m[15] - 
+		m[8]  * m[7]  * m[14] - 
+		m[12] * m[6]  * m[11] + 
+		m[12] * m[7]  * m[10];
+
+	inv[8] = m[4]  * m[9] * m[15] - 
+		m[4]  * m[11] * m[13] - 
+		m[8]  * m[5] * m[15] + 
+		m[8]  * m[7] * m[13] + 
+		m[12] * m[5] * m[11] - 
+		m[12] * m[7] * m[9];
+
+	inv[12] = -m[4]  * m[9] * m[14] + 
+		m[4]  * m[10] * m[13] +
+		m[8]  * m[5] * m[14] - 
+		m[8]  * m[6] * m[13] - 
+		m[12] * m[5] * m[10] + 
+		m[12] * m[6] * m[9];
+
+	inv[1] = -m[1]  * m[10] * m[15] + 
+		m[1]  * m[11] * m[14] + 
+		m[9]  * m[2] * m[15] - 
+		m[9]  * m[3] * m[14] - 
+		m[13] * m[2] * m[11] + 
+		m[13] * m[3] * m[10];
+
+	inv[5] = m[0]  * m[10] * m[15] - 
+		m[0]  * m[11] * m[14] - 
+		m[8]  * m[2] * m[15] + 
+		m[8]  * m[3] * m[14] + 
+		m[12] * m[2] * m[11] - 
+		m[12] * m[3] * m[10];
+
+	inv[9] = -m[0]  * m[9] * m[15] + 
+		m[0]  * m[11] * m[13] + 
+		m[8]  * m[1] * m[15] - 
+		m[8]  * m[3] * m[13] - 
+		m[12] * m[1] * m[11] + 
+		m[12] * m[3] * m[9];
+
+	inv[13] = m[0]  * m[9] * m[14] - 
+		m[0]  * m[10] * m[13] - 
+		m[8]  * m[1] * m[14] + 
+		m[8]  * m[2] * m[13] + 
+		m[12] * m[1] * m[10] - 
+		m[12] * m[2] * m[9];
+
+	inv[2] = m[1]  * m[6] * m[15] - 
+		m[1]  * m[7] * m[14] - 
+		m[5]  * m[2] * m[15] + 
+		m[5]  * m[3] * m[14] + 
+		m[13] * m[2] * m[7] - 
+		m[13] * m[3] * m[6];
+
+	inv[6] = -m[0]  * m[6] * m[15] + 
+		m[0]  * m[7] * m[14] + 
+		m[4]  * m[2] * m[15] - 
+		m[4]  * m[3] * m[14] - 
+		m[12] * m[2] * m[7] + 
+		m[12] * m[3] * m[6];
+
+	inv[10] = m[0]  * m[5] * m[15] - 
+		m[0]  * m[7] * m[13] - 
+		m[4]  * m[1] * m[15] + 
+		m[4]  * m[3] * m[13] + 
+		m[12] * m[1] * m[7] - 
+		m[12] * m[3] * m[5];
+
+	inv[14] = -m[0]  * m[5] * m[14] + 
+		m[0]  * m[6] * m[13] + 
+		m[4]  * m[1] * m[14] - 
+		m[4]  * m[2] * m[13] - 
+		m[12] * m[1] * m[6] + 
+		m[12] * m[2] * m[5];
+
+	inv[3] = -m[1] * m[6] * m[11] + 
+		m[1] * m[7] * m[10] + 
+		m[5] * m[2] * m[11] - 
+		m[5] * m[3] * m[10] - 
+		m[9] * m[2] * m[7] + 
+		m[9] * m[3] * m[6];
+
+	inv[7] = m[0] * m[6] * m[11] - 
+		m[0] * m[7] * m[10] - 
+		m[4] * m[2] * m[11] + 
+		m[4] * m[3] * m[10] + 
+		m[8] * m[2] * m[7] - 
+		m[8] * m[3] * m[6];
+
+	inv[11] = -m[0] * m[5] * m[11] + 
+		m[0] * m[7] * m[9] + 
+		m[4] * m[1] * m[11] - 
+		m[4] * m[3] * m[9] - 
+		m[8] * m[1] * m[7] + 
+		m[8] * m[3] * m[5];
+
+	inv[15] = m[0] * m[5] * m[10] - 
+		m[0] * m[6] * m[9] - 
+		m[4] * m[1] * m[10] + 
+		m[4] * m[2] * m[9] + 
+		m[8] * m[1] * m[6] - 
+		m[8] * m[2] * m[5];
+
+	float det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+
+	if (det == 0)
+	{
+		println("Matrix inversion failed (determinant is zero)");
+		return m;
+	}
+
+	det = 1.0 / det;
+	
+	for (int i = 0; i < 16; i++)
+		m[i] = inv[i] * det;
+
+	return m;
 }
 
 // Randomize the direction of a vector by some amount
@@ -117,8 +273,6 @@ Vector spreadDir(Vector dir, float degrees, int spreadFunc=SPREAD_UNIFORM)
 	// Apply rotation around "left/right" axis
 	array<float> pitRotMat = rotationMatrix(pitAxis, y);
 	vecAiming = matMultVector(pitRotMat, vecAiming).Normalize();
-	
-	// TODO: This can probably be done with 1 matrix multiply, but I'm not that good at math.
 			
 	return vecAiming;
 }
@@ -204,53 +358,171 @@ DecalTarget getProjectileDecalTarget(CBaseEntity@ ent, float searchDist)
 	return decalTarget;
 }
 
-class weapon_custom_projectile : ScriptBaseEntity
+// rotates a point around 0,0,0 using YXZ euler rotation order
+Vector rotatePoint(Vector pos, Vector angles)
+{
+	Vector yawAxis = Vector(0,0,1);
+	Vector pitAxis = Vector(0,1,0);
+	Vector rollAxis = Vector(1,0,0);
+	
+	array<float> yawRotMat = rotationMatrix(yawAxis, Math.DegreesToRadians(angles.y));
+	pitAxis = matMultVector(yawRotMat, pitAxis);
+	rollAxis = matMultVector(yawRotMat, rollAxis);
+	
+	array<float> pitRotMat = rotationMatrix(pitAxis, Math.DegreesToRadians(angles.x));
+	rollAxis = matMultVector(pitRotMat, rollAxis);
+	
+	array<float> rollRotMat = rotationMatrix(rollAxis, Math.DegreesToRadians(angles.z));
+	
+	pos = matMultVector(yawRotMat, pos);
+	pos = matMultVector(pitRotMat, pos);
+	pos = matMultVector(rollRotMat, pos);
+	
+	return pos;
+}
+
+// Given a point that has been rotated around 0,0,0 by "angles", figure out
+// where the point would be if we were to unapply all of those rotations.
+// This is probably a super naive way of doing it (me no is good at math).
+Vector unwindPoint(Vector pos, Vector angles)
+{
+	Vector yawAxis = Vector(0,0,1);
+	Vector pitAxis = Vector(0,1,0);
+	Vector rollAxis = Vector(1,0,0);
+	angles.x = Math.DegreesToRadians(angles.x);
+	angles.y = Math.DegreesToRadians(angles.y);
+	angles.z = Math.DegreesToRadians(angles.z);
+	
+	// get rotation axes from angles
+	array<float> yawRotMat = rotationMatrix(yawAxis, angles.y);
+	pitAxis = matMultVector(yawRotMat, pitAxis);
+	rollAxis = matMultVector(yawRotMat, rollAxis);
+	array<float> pitRotMat = rotationMatrix(pitAxis, angles.x);
+	rollAxis = matMultVector(pitRotMat, rollAxis);
+	
+	// create matrices that undo the rotations
+	yawRotMat = rotationMatrix(yawAxis, -angles.y);
+	pitRotMat = rotationMatrix(pitAxis, -angles.x);
+	array<float> rollRotMat = rotationMatrix(rollAxis, -angles.z);
+	
+	// apply opposite rotations in reverse order
+	pos = matMultVector(rollRotMat, pos);
+	pos = matMultVector(pitRotMat, pos);
+	pos = matMultVector(yawRotMat, pos);
+	
+	return pos;
+}
+
+class WeaponCustomProjectile : ScriptBaseEntity
 {
 	float thinkDelay = 0.05;
+	weapon_custom_shoot@ shoot_opts;
+	ProjectileOptions@ options;
+	EHandle spriteAttachment; // we'll need to kill this before we die (lol murder)
+	bool attached;
+	EHandle target; // entity attached to
+	Vector attachStartOri; // Our initial position when attaching to the entity
+	Vector targetStartOri; // initial position of the entity we attached to
+	Vector attachStartDir; // our initial direction when attaching to the entity
+	int attachTime = 0;
+	
 	
 	void Spawn()
 	{
-		self.pev.movetype 		= MOVETYPE_BOUNCE;
-		self.pev.solid 			= SOLID_BBOX;
+		@options = shoot_opts.projectile;
 		
-		// Allow for custom models
+		self.pev.movetype = MOVETYPE_BOUNCE;
+		self.pev.solid = SOLID_BBOX;
+		
 		g_EntityFuncs.SetModel( self, pev.model );
 		
-		SetThink( ThinkFunction( this.MoveThink ) );
+		pev.mins = Vector(-options.size, -options.size, -options.size);
+		pev.maxs = Vector(options.size, options.size, options.size);
+		pev.mins = Vector(0.1, 0.1, 0.1);
+		pev.friction = 1.0f - options.elasticity;
+		
+		SetThink( ThinkFunction( MoveThink ) );
 		self.pev.nextthink = g_Engine.time + thinkDelay;
 	}
 	
 	void MoveThink()
 	{
-		g_EngineFuncs.VecToAngles(self.pev.velocity, self.pev.angles);
+		if (attached and target)
+		{
+			CBaseEntity@ tar = target;
+			
+			// rotate position around target
+			Vector newOri = attachStartOri + (tar.pev.origin - targetStartOri);
+			newOri = rotatePoint(newOri - tar.pev.origin, -tar.pev.angles) + tar.pev.origin;
+			
+			// rotate orientation around target
+			Vector newDir = rotatePoint(attachStartDir, -tar.pev.angles);
+			g_EngineFuncs.VecToAngles(newDir, self.pev.angles);
+			
+			pev.origin = newOri;
+			
+			// prevent sudden jerking due to movement lagging behind the Touch() event
+			attachTime++;
+			if (attachTime > 2) {
+				pev.velocity = Vector(0,0,0);
+				pev.movetype = MOVETYPE_FLY;
+			}
+		}
+		else
+		{
+			g_EngineFuncs.VecToAngles(self.pev.velocity, self.pev.angles);
+		}
+		
 		self.pev.nextthink = g_Engine.time + thinkDelay;
 	}
 	
-	void Block( CBaseEntity@ pOther )
+	void uninstall_steam_and_kill_yourself()
 	{
-		println("LE BLOCKED");
+		g_EntityFuncs.Remove(self);
+		if (spriteAttachment)
+			g_EntityFuncs.Remove(spriteAttachment);
+	}
+	
+	void KnockTarget(CBaseEntity@ ent)
+	{
+		ent.pev.velocity = ent.pev.velocity + pev.velocity.Normalize() * shoot_opts.knockback;
 	}
 	
 	void Touch( CBaseEntity@ pOther )
 	{
+		if (attached)
+			return;
 		int event = PROJ_ACT_BOUNCE;
 		if (pOther.IsBSPModel())
-			event = pev.iuser1;
+			event = options.world_event;
 		else
-			event = pev.iuser2;
+			event = options.monster_event;
 			
-		if (event == PROJ_ACT_EXPLODE)
+		KnockTarget(pOther);
+		switch(event)
 		{
-			//kill
+			case PROJ_ACT_EXPLODE:
+				explode_custom_projectile(@self, shoot_opts);
+				uninstall_steam_and_kill_yourself();
+				return;
+			case PROJ_ACT_DAMAGE:
+				uninstall_steam_and_kill_yourself();
+				return;
+			case PROJ_ACT_ATTACH:
+				target = pOther;
+				attachStartOri = unwindPoint(pev.origin - pOther.pev.origin, -pOther.pev.angles) + pOther.pev.origin;
+				attachStartDir = unwindPoint(pev.velocity.Normalize(), -pOther.pev.angles);
+				targetStartOri = pOther.pev.origin;
+				self.pev.solid = SOLID_NOT;
+				pev.velocity = Vector(0,0,0);
+				attached = true;
+				return;
 		}
 			
-		println("EVENT IS : " + event);
-			
-		string bounce_decal = pev.noise1;
-		if (bounce_decal.Length() > 0)
+		if (options.bounce_decal.Length() > 0)
 		{
 			DecalTarget dt = getProjectileDecalTarget(self, 0);
-			te_decal(dt.pos, dt.ent, bounce_decal);
+			te_decal(dt.pos, dt.ent, options.bounce_decal);
 		}
 	}
 }

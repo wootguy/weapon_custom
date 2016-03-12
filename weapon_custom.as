@@ -23,7 +23,7 @@ void WeaponCustomMapInit()
 {	
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom", "weapon_custom" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_shoot", "weapon_custom_shoot" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_projectile", "weapon_custom_projectile" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomProjectile", "weapon_custom_projectile" );
 }
 
 void WeaponCustomMapActive()
@@ -163,7 +163,7 @@ class ProjectileOptions
 	float explode_mag;
 	float impact_dmg;
 	float elasticity; // percentage of reflected velocity
-	float size;
+	float size;		  // hull size (all dimensions)
 	string entity_class; // custom projectile entity
 	string explode_spr;
 	string explode_snd;
@@ -174,7 +174,7 @@ class ProjectileOptions
 	string bounce_decal;
 	
 	string trail_spr;
-	int trail_sprId = 2;
+	int trail_sprId = 2; // remove me
 	int trail_life;
 	int trail_width;
 	Color trail_color;
@@ -186,6 +186,8 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int ammo_cost;
 	float cooldown = 0.5;
 	float recoil;
+	float kickback;
+	float knockback;
 	float max_range;
 	int bullets;
 	int bullet_type; // see docs for "Bullet"
@@ -233,6 +235,8 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "ammo_cost")     ammo_cost = atoi(szValue);			
 		else if (szKey == "cooldown")      cooldown = atof(szValue);
 		else if (szKey == "recoil")        recoil = atof(szValue);
+		else if (szKey == "kickback")      kickback = atof(szValue);
+		else if (szKey == "knockback")     knockback = atof(szValue);
 		else if (szKey == "max_range")     max_range = atof(szValue);
 		
 		else if (szKey == "bullets")       bullets = atoi(szValue);

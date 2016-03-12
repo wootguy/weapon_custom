@@ -73,6 +73,8 @@
 	ammo_cost(string) : "Ammo Cost" : "1"
 	cooldown(string) : "Cooldown" : "0.15"
 	recoil(string) : "Recoil" : "2"
+	kickback(string) : "Kickback (User Push)" : "0"
+	knockback(string) : "Knockback (Target Push)" : "10"
 	max_range(string) : "Max Range" : "4096"
 	
 	bullets(integer) : "Bullets" : 1

@@ -137,13 +137,14 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			Vector vecAiming = spreadDir(perfectAim, shoot_opts.bullet_spread, shoot_opts.bullet_spread_func);
 		
 			// optimized multiplayer. Widened to make it easier to hit a moving player
-			self.m_pPlayer.FireBullets( 1, vecSrc, vecAiming, Vector(0,0,0), 8192, BULLET_PLAYER_MP5, 2 );
+			Math.MakeAimVectors(vecAiming);
+			self.m_pPlayer.FireBullets( 1, vecSrc, vecAiming, Vector(0,0,0), 8192, BULLET_PLAYER_MP5, 0 );
 			
 			// bullet decal and particle effects
 			if (true)
 			{
 				TraceResult tr;
-				Vector vecEnd	= vecSrc + vecAiming * 4096;
+				Vector vecEnd = vecSrc + vecAiming * 4096;
 				g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, self.m_pPlayer.edict(), tr );
 				
 				if( tr.flFraction < 1.0 )
@@ -152,8 +153,15 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					{
 						CBaseEntity@ pHit = g_EntityFuncs.Instance( tr.pHit );
 						
-						if( pHit is null || pHit.IsBSPModel() )
-							g_WeaponFuncs.DecalGunshot( tr, BULLET_PLAYER_MP5 );
+						if( pHit !is null ) 
+						{
+							if (pHit.IsBSPModel())
+							{
+								g_WeaponFuncs.DecalGunshot( tr, BULLET_PLAYER_MP5 );
+							}
+							pHit.pev.velocity = pHit.pev.velocity + vecAiming * shoot_opts.knockback;
+						}
+							
 					}
 				}
 				
@@ -193,26 +201,20 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		Vector boltOri = self.m_pPlayer.pev.origin + self.m_pPlayer.pev.view_ofs;
 		Vector boltAngles = self.m_pPlayer.pev.v_angle * Vector(-1, 1, 1);
 		Vector projectile_velocity = g_Engine.v_forward * options.speed;
-		string model = options.model.Length() > 0 ? options.model : "models/error.mdl";
 		keys["origin"] = boltOri.ToString();
 		keys["angles"] = boltAngles.ToString();
 		keys["velocity"] = projectile_velocity.ToString();
 		
-		// don't replace default monster models with error.mdl
+		// replace model or use error.mdl if no model specified and not a standard entity
+		string model = options.model.Length() > 0 ? options.model : "models/error.mdl";
 		if (options.type == PROJECTILE_CUSTOM or options.type == PROJECTILE_OTHER and options.model.Length() > 0) 
-			keys["model"] = model;			
+			keys["model"] = model;
+			
 		CBaseEntity@ shootEnt = g_EntityFuncs.CreateEntity(classname, keys, false);	
-		@shootEnt.pev.owner = self.m_pPlayer.edict(); // do this or else crash
+		WeaponCustomProjectile@ shootEnt_c = cast<WeaponCustomProjectile@>(CastToScriptClass(shootEnt));
+		@shootEnt.pev.owner = self.m_pPlayer.edict(); // do this or else crash		
+		@shootEnt_c.shoot_opts = shoot_opts;
 		
-		// write shootoptions into shared vars
-		shootEnt.pev.mins = Vector(-options.size, -options.size, -options.size);
-		shootEnt.pev.maxs = Vector(options.size, options.size, options.size);
-		shootEnt.pev.mins = Vector(0.1, 0.1, 0.1);
-		shootEnt.pev.friction = 1.0f - options.elasticity;
-		shootEnt.pev.noise1 = options.bounce_decal;
-		shootEnt.pev.iuser1 = options.world_event;
-		shootEnt.pev.iuser2 = options.monster_event;
-		ScriptClassInterface@ shootEntCustom = g_EntityFuncs.CastToScriptClass(shootEnt);
 		g_EntityFuncs.DispatchSpawn(shootEnt.edict());
 		
 		EHandle mdlHandle = @shootEnt;
@@ -232,6 +234,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			spr.pev.body = 0; // attachement point
 			sprHandle = @spr;
 		}
+		shootEnt_c.spriteAttachment = sprHandle;
 		
 		// attach a trail
 		if (options.trail_spr.Length() > 0)
@@ -339,6 +342,13 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		g_EntityFuncs.UseSatchelCharges(self.m_pPlayer.pev, SATCHEL_DETONATE);
 	}
 
+	void KickBack(int fmode)
+	{
+		weapon_custom_shoot@ shoot_opts = settings.get_shoot_settings(fmode);
+		
+		Vector kickVel = self.m_pPlayer.GetAutoaimVector(0) * -shoot_opts.kickback;
+		self.m_pPlayer.pev.velocity = self.m_pPlayer.pev.velocity + kickVel;
+	}
 	
 	// calculates beams, end sprite locations, and damage
 	bool UpdateBeam(int beamId)
@@ -408,7 +418,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					if (ent.entindex() != 0) // impact if not world
 						@impacts[i].ent = ent;
 					if (ent.entindex() != 0)
+					{
+						if (ent.IsMonster()) {
+							ent.pev.velocity = ent.pev.velocity + dir*active_opts.knockback;
+						}						
 						break;
+					}
 				}
 				
 				// Calculate reflection vector
@@ -684,6 +699,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		// player "shoot" animation
 		self.m_pPlayer.SetAnimation( PLAYER_ATTACK1 );
 
+		KickBack(0);
 		ShootBullets(0);
 		ShootProjectile(0);
 		ShootBeam(0);
@@ -737,6 +753,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		// play this sound through BODY channel so we can hear it if player didn't stop firing MP3
 		g_SoundSystem.EmitSoundDyn( self.m_pPlayer.edict(), CHAN_WEAPON, settings.shoot_sound(1), 0.8, ATTN_NORM, 0, PITCH_NORM );
 
+		KickBack(1);
 		ShootBullets(1);
 		ShootProjectile(1);
 		DetonateSatchels(1);
