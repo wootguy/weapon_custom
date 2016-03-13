@@ -485,7 +485,8 @@ class WeaponCustomProjectile : ScriptBaseEntity
 	
 	void KnockTarget(CBaseEntity@ ent)
 	{
-		ent.pev.velocity = ent.pev.velocity + pev.velocity.Normalize() * shoot_opts.knockback;
+		if (ent.IsMonster())
+			ent.pev.velocity = ent.pev.velocity + pev.velocity.Normalize() * shoot_opts.knockback;
 	}
 	
 	void Touch( CBaseEntity@ pOther )
