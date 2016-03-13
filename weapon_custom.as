@@ -88,6 +88,7 @@ int FL_SHOOT_PROJ_NO_GRAV = 64;
 int FL_SHOOT_IN_WATER = 128;
 int FL_SHOOT_NO_BULLET_DECALS = 256;
 int FL_SHOOT_DETONATE_SATCHELS = 512;
+int FL_SHOOT_NO_AUTOFIRE = 1024;
 
 enum spread_func
 {
@@ -195,6 +196,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int bullet_spread_func;
 	float bullet_damage;
 	float bullet_spread;
+	float bullet_delay; // burst fire delay
 	
 	ProjectileOptions@ projectile;
 	
@@ -243,6 +245,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "bullet_type")   bullet_type = atoi(szValue);
 		else if (szKey == "bullet_damage") bullet_damage = atof(szValue);
 		else if (szKey == "bullet_spread") bullet_spread = atof(szValue);
+		else if (szKey == "bullet_delay")  bullet_delay = atof(szValue);
 		else if (szKey == "bullet_color")  bullet_color = atoi(szValue);
 		else if (szKey == "bullet_spread_func")  bullet_spread_func = atoi(szValue);
 		
@@ -386,6 +389,11 @@ class weapon_custom_shoot : ScriptBaseEntity
 		}
 	}
 	
+	bool can_fire_underwater() { return pev.spawnflags & FL_SHOOT_IN_WATER != 0; }
+	bool shoots_bullet() 	   { return pev.spawnflags & FL_SHOOT_BULLET != 0; }
+	bool shoots_projectile()   { return pev.spawnflags & FL_SHOOT_PROJECTILE != 0; }
+	bool shoots_beam() 	       { return pev.spawnflags & FL_SHOOT_BEAM != 0; }
+	
 	void Precache()
 	{
 		for (uint i = 0; i < sounds.length(); i++) {
@@ -499,12 +507,6 @@ class weapon_custom : ScriptBaseEntity
 	}
 	
 	int clip_size()                      { return self.pev.skin; }
-	float cooldown(int fmode)            { return fire_settings[fmode].cooldown; }
-	bool can_fire_underwater(int fmode)  { return fire_settings[fmode].pev.spawnflags & FL_SHOOT_IN_WATER != 0; }
-	bool shoots_bullet(int fmode) 	     { return fire_settings[fmode].pev.spawnflags & FL_SHOOT_BULLET != 0; }
-	bool shoots_projectile(int fmode)    { return fire_settings[fmode].pev.spawnflags & FL_SHOOT_PROJECTILE != 0; }
-	bool shoots_beam(int fmode) 	     { return fire_settings[fmode].pev.spawnflags & FL_SHOOT_BEAM != 0; }
-	int shoot_flags(int fmode)			 { return fire_settings[fmode].pev.spawnflags; }
 	ProjectileOptions@ get_projectile(int fmode) { return @fire_settings[fmode].projectile; }
 	weapon_custom_shoot@ get_shoot_settings(int fmode) { return @fire_settings[fmode]; }
 	string shoot_sound(int fmode)        { return fire_settings[fmode].getRandomShootSound(); }

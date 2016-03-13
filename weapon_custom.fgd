@@ -67,6 +67,7 @@
 		128 : "Works in water" : 0
 		256 : "No Bullet Decals" : 0
 		512 : "Detonate Satchels" : 0
+		1024 : "No Autofire" : 0
 	]
 	targetname(target_source) : "Name"
 	sounds(string) : "Shoot Sounds" : "weapons/glauncher.wav;weapons/glauncher2.wav"
@@ -105,7 +106,7 @@
 		0 : "Gaussian"
 		1 : "Uniform"
 	]
-	//bullet_delay(string) : "Bullet Burst Fire Delay" : "0"
+	bullet_delay(string) : "Bullet Burst Fire Delay" : "0"
 	bullet_color(choices) : "Bullet Tracers" : 4 =
 	[
 		-1: "None"
