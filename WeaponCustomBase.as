@@ -157,12 +157,18 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					
 					if( pHit !is null ) 
 					{
-						if (pHit.IsBSPModel())
-							g_WeaponFuncs.DecalGunshot( tr, BULLET_PLAYER_MP5 );
+						string decal = getBulletDecalOverride(pHit, getDecal(active_opts.bullet_decal));
+						if (pHit.IsBSPModel()) {
+							if (active_opts.bullet_impact == BULLET_IMPACT_STANDARD)
+							{
+								te_gunshotdecal(tr.vecEndPos, pHit, decal);
+							}
+							if (active_opts.bullet_impact == BULLET_IMPACT_MELEE)
+								te_decal(tr.vecEndPos, pHit, decal);
+						}
 						if (pHit.IsMonster())
 							pHit.pev.velocity = pHit.pev.velocity + vecAiming * active_opts.knockback;
 					}
-						
 				}
 			}
 			
@@ -182,7 +188,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				}
 			}
 			
-			if (active_opts.pev.spawnflags & FL_SHOOT_EXPLOSIVE_BULLETS != 0)
+			if (active_opts.bullet_impact == BULLET_IMPACT_EXPLODE)
 			{
 				// move the explosion away from the surface so the sprite doesn't clip through it
 				Vector expPos = tr.vecEndPos + tr.vecPlaneNormal*16.0f;
@@ -274,9 +280,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void ShootProjectile()
 	{		
-		if (!active_opts.shoots_projectile())
-			return;
-
 		Math.MakeVectors( self.m_pPlayer.pev.v_angle + self.m_pPlayer.pev.punchangle );
 		
 		ProjectileOptions@ options = active_opts.projectile;
@@ -330,7 +333,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void ShootBeam()
 	{
-		if (!active_opts.shoots_beam() or beam_active)
+		if (beam_active)
 			return;
 		
 		BeamOptions@ beam_opts = active_opts.beams[0];
@@ -470,9 +473,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 							te_streaksplash(tr.vecEndPos, n, active_opts.rico_trace_color,
 											active_opts.rico_trace_count, active_opts.rico_trace_speed/2, active_opts.rico_trace_speed);
 						}
-						if (active_opts.rico_decal.Length() > 0)
+						if (active_opts.rico_decal != DECAL_NONE)
 						{
-							te_decal(tr.vecEndPos, ent, active_opts.rico_decal);
+							te_decal(tr.vecEndPos, ent, getDecal(active_opts.rico_decal));
 						}
 						string rico_snd = active_opts.getRandomRicochetSound();
 						if (rico_snd.Length() > 0)
@@ -729,10 +732,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		AttackEffects();
 		
 		// shoot stuff
-		if (active_opts.shoots_bullet())
-			ShootBullets();
-		ShootProjectile();
-		ShootBeam();
+		switch(active_opts.shoot_type)
+		{
+			case SHOOT_BULLETS: ShootBullets(); break;
+			case SHOOT_PROJECTILE: ShootProjectile(); break;
+			case SHOOT_BEAM: ShootBeam(); break;
+		}
 		DetonateSatchels();
 	}
 	

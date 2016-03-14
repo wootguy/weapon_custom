@@ -83,12 +83,24 @@ int FL_SHOOT_PROJECTILE = 2;
 int FL_SHOOT_BEAM = 4;
 //int FL_SHOOT_BEAM = 8;
 int FL_SHOTT_CUSTOM_EXPLOSION = 16;
-int FL_SHOOT_EXPLOSIVE_BULLETS = 32;
 int FL_SHOOT_PROJ_NO_GRAV = 64;
 int FL_SHOOT_IN_WATER = 128;
-int FL_SHOOT_NO_BULLET_DECALS = 256;
 int FL_SHOOT_DETONATE_SATCHELS = 512;
 int FL_SHOOT_NO_AUTOFIRE = 1024;
+
+enum shoot_types
+{
+	SHOOT_BULLETS,
+	SHOOT_PROJECTILE,
+	SHOOT_BEAM
+}
+
+enum bullet_impact
+{
+	BULLET_IMPACT_STANDARD,
+	BULLET_IMPACT_MELEE,
+	BULLET_IMPACT_EXPLODE,
+}
 
 enum spread_func
 {
@@ -100,7 +112,7 @@ enum fire_mode
 {
 	PRIMARY,
 	SECONDARY
-};
+}
 
 enum projectile_action
 {
@@ -108,7 +120,7 @@ enum projectile_action
 	PROJ_ACT_EXPLODE,
 	PROJ_ACT_BOUNCE,
 	PROJ_ACT_ATTACH,
-};
+}
 
 enum projectile_type
 {
@@ -124,7 +136,7 @@ enum projectile_type
 	PROJECTILE_SHOCK,
 	PROJECTILE_CUSTOM,
 	PROJECTILE_OTHER
-};
+}
 
 enum beam_type
 {
@@ -151,7 +163,7 @@ class BeamOptions
 	float time;
 	string sprite;
 	Color color;
-};
+}
 
 class ProjectileOptions
 {
@@ -171,8 +183,8 @@ class ProjectileOptions
 	string impact_snd;
 	string model;
 	string sprite;
-	string explode_decal;
-	string bounce_decal;
+	int explode_decal;
+	int bounce_decal;
 	
 	string trail_spr;
 	int trail_sprId = 2; // remove me
@@ -183,6 +195,7 @@ class ProjectileOptions
 
 class weapon_custom_shoot : ScriptBaseEntity
 {
+	int shoot_type;
 	array<string> sounds; // shoot sounds
 	int ammo_cost;
 	float cooldown = 0.5;
@@ -194,6 +207,8 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int bullet_type; // see docs for "Bullet"
 	int bullet_color;
 	int bullet_spread_func;
+	int bullet_impact;
+	int bullet_decal;
 	float bullet_damage;
 	float bullet_spread;
 	float bullet_delay; // burst fire delay
@@ -216,7 +231,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int explode_gib_mat;
 	
 	array<string> rico_snds;
-	string rico_decal;
+	int rico_decal;
 	string rico_part_spr;
 	float rico_angle;
 	int rico_part_count;
@@ -235,6 +250,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 			
 		if 		(szKey == "sounds")        sounds = szValue.Split(";");			
 		else if (szKey == "ammo_cost")     ammo_cost = atoi(szValue);			
+		else if (szKey == "shoot_type")    shoot_type = atoi(szValue);			
 		else if (szKey == "cooldown")      cooldown = atof(szValue);
 		else if (szKey == "recoil")        recoil = atof(szValue);
 		else if (szKey == "kickback")      kickback = atof(szValue);
@@ -248,6 +264,8 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "bullet_delay")  bullet_delay = atof(szValue);
 		else if (szKey == "bullet_color")  bullet_color = atoi(szValue);
 		else if (szKey == "bullet_spread_func")  bullet_spread_func = atoi(szValue);
+		else if (szKey == "bullet_impact")  bullet_impact = atoi(szValue);
+		else if (szKey == "bullet_decal")  bullet_decal = atoi(szValue);
 		
 		else if (szKey == "projectile_type")          projectile.type = atoi(szValue);
 		else if (szKey == "projectile_die_event")     projectile.die_event = atoi(szValue);
@@ -269,7 +287,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "projectile_trail_life")    projectile.trail_life = atoi(szValue);
 		else if (szKey == "projectile_trail_width")   projectile.trail_width = atoi(szValue);
 		else if (szKey == "projectile_trail_color")   projectile.trail_color = parseColor(szValue);
-		else if (szKey == "projectile_bounce_decal")  projectile.bounce_decal = szValue;
+		else if (szKey == "projectile_bounce_decal")  projectile.bounce_decal = atoi(szValue);
 				
 		else if (szKey == "beam_impact_spr")       beam_impact_spr = szValue;
 		else if (szKey == "beam_ricochet_limit")   beam_ricochet_limit = atoi(szValue);
@@ -295,7 +313,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "explode_dmg")       explode_damage = atof(szValue);
 		else if (szKey == "explode_spr")       explode_spr = szValue;
 		else if (szKey == "explode_snd")       explode_snd = szValue;
-		else if (szKey == "explode_decal")     explode_decal = szValue;
+		else if (szKey == "explode_decal")     explode_decal = atoi(szValue);
 		else if (szKey == "explode_smoke_spr") explode_smoke_spr = szValue;
 		else if (szKey == "explode_dlight")    explode_light = parseColor(szValue);
 		else if (szKey == "explode_gibs")      explode_gibs = atoi(szValue);
@@ -303,7 +321,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "explode_gib_mat")   explode_gib_mat = atoi(szValue);
 		
 		else if (szKey == "rico_snds")        rico_snds = szValue.Split(";");	
-		else if (szKey == "rico_decal")       rico_decal = szValue;
+		else if (szKey == "rico_decal")       rico_decal = atoi(szValue);
 		else if (szKey == "rico_part_spr")    rico_part_spr = szValue;
 		else if (szKey == "rico_part_count")  rico_part_count = atoi(szValue);
 		else if (szKey == "rico_part_scale")  rico_part_scale = atoi(szValue);
@@ -390,9 +408,6 @@ class weapon_custom_shoot : ScriptBaseEntity
 	}
 	
 	bool can_fire_underwater() { return pev.spawnflags & FL_SHOOT_IN_WATER != 0; }
-	bool shoots_bullet() 	   { return pev.spawnflags & FL_SHOOT_BULLET != 0; }
-	bool shoots_projectile()   { return pev.spawnflags & FL_SHOOT_PROJECTILE != 0; }
-	bool shoots_beam() 	       { return pev.spawnflags & FL_SHOOT_BEAM != 0; }
 	
 	void Precache()
 	{

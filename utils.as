@@ -520,10 +520,10 @@ class WeaponCustomProjectile : ScriptBaseEntity
 				return;
 		}
 			
-		if (options.bounce_decal.Length() > 0)
+		if (options.bounce_decal != DECAL_NONE)
 		{
 			DecalTarget dt = getProjectileDecalTarget(self, 0);
-			te_decal(dt.pos, dt.ent, options.bounce_decal);
+			te_decal(dt.pos, dt.ent, getDecal(options.bounce_decal));
 		}
 	}
 }
@@ -604,6 +604,103 @@ void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ sho
 	}
 }
 
+enum impact_decal_type
+{
+	DECAL_NONE = -2,
+	DECAL_BIGBLOOD = 0,
+	DECAL_BIGSHOT,
+	DECAL_BLOOD,
+	DECAL_BLOODHAND,
+	DECAL_BULLETPROOF,
+	DECAL_GLASSBREAK,
+	DECAL_LETTERS,
+	DECAL_SMALLCRACK,
+	DECAL_LARGECRACK,
+	DECAL_LARGEDENT,
+	DECAL_SMALLDENT,
+	DECAL_DING,
+	DECAL_RUST,
+	DECAL_FEET,
+	DECAL_GARGSTOMP,
+	DECAL_GUASS,
+	DECAL_GRAFITTI,
+	DECAL_HANDICAP,
+	DECAL_MOMMABLOB,
+	DECAL_SMALLSCORTCH,
+	DECAL_MEDIUMSCORTCH,
+	DECAL_TINYSCORTCH,
+	DECAL_OIL,
+	DECAL_LARGESCORTCH,
+	DECAL_SMALLSHOT,
+	DECAL_NUMBERS,
+	DECAL_TINYSCORTCH2,
+	DECAL_SMALLSCORTCH2,
+	DECAL_SPIT,
+	DECAL_BIGABLOOD,
+	DECAL_TARGET,
+	DECAL_TIRE,
+	DECAL_ABLOOD,
+	DECAL_TYPES,
+}
+
+array< array<string> > g_decals = {
+	{"{bigblood1", "{bigblood2"},
+	{"{bigshot1", "{bigshot2", "{bigshot3", "{bigshot4", "{bigshot5"},
+	{"{blood1", "{blood2", "{blood3", "{blood4", "{blood5", "{blood6", "{blood7", "{blood8"},
+	{"{bloodhand1", "{bloodhand2", "{bloodhand3", "{bloodhand4", "{bloodhand5", "{bloodhand6"},
+	{"{bproof1"},
+	{"{break1", "{break2", "{break3"},
+	{"{capsa", "{capsb", "{capsc", "{capsd", "{capse", "{capsf", "{capsg", "{capsh", "{capsi", "{capsj",
+		"{capsk", "{capsl", "{capsm", "{capsn", "{capso", "{capsp", "{capsq", "{capsr", "{capss", "{capst",
+		"{capsu", "{capsv", "{capsw", "{capsx", "{capsy", "{capsz"},
+	{"{crack1", "{crack2"},
+	{"{crack3", "{crack4"},
+	{"{dent1", "{dent2"},
+	{"{dent3", "{dent4", "{dent5", "{dent6"},
+	{"{ding3", "{ding4", "{ding5", "{ding6", "{ding7", "{ding8", "{ding9"},
+	{"{ding10", "{ding11"},
+	{"{foot_l", "{foot_r"},
+	{"{gargstomp"},
+	{"{gaussshot1"},
+	{"{graf001", "{graf002", "{graf003", "{graf004", "{graf005"},
+	{"{handi"},
+	{"{mommablob"},
+	{"{ofscorch1", "{ofscorch2", "{ofscorch3"},
+	{"{ofscorch4", "{ofscorch5", "{ofscorch6"},
+	{"{ofsmscorch1", "{ofsmscorch2", "{ofsmscorch3"},
+	{"{oil1", "{oil2"},
+	{"{scorch1", "{scorch2", "{scorch3"},
+	{"{shot1", "{shot2", "{shot3", "{shot4", "{shot5"},
+	{"{small#s0", "{small#s1", "{small#s2", "{small#s3", "{small#s4",
+		"{small#s5", "{small#s6", "{small#s7", "{small#s8", "{small#s9"},
+	{"{smscorch1", "{smscorch2"},
+	{"{smscorch3"},
+	{"{spit1", "{spit2"},
+	{"{spr_splt1", "{spr_splt2", "{spr_splt3"},
+	{"{target", "{target2"},
+	{"{tire1", "{tire2"},
+	{"{yblood1", "{yblood2", "{yblood3", "{yblood4", "{yblood5", "{yblood6"},
+};
+
+string getDecal(int decalType)
+{
+	if (decalType < 0 or decalType >= int(g_decals.length()))
+		decalType = DECAL_SMALLSHOT;
+		
+	array<string> decals = g_decals[decalType];
+	return decals[ Math.RandomLong(0, decals.length()-1) ];
+}
+
+// breakable glass uses a special decal when shot
+string getBulletDecalOverride(CBaseEntity@ ent, string currentDecal)
+{
+	// learned this from HLSDK func_break.cpp line 158
+	if (ent !is null and ent.pev.classname == "func_breakable" or ent.pev.classname == "func_door")
+		if (ent.pev.playerclass == 1)
+			return getDecal(DECAL_GLASSBREAK);
+	
+	return currentDecal;
+}
 
 // Temporary Entity Effects (minimized)
 void te_explosion(Vector pos, string sprite="sprites/zerogxplode.spr", int scale=10, int frameRate=15, int flags=0, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_EXPLOSION);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(scale);m.WriteByte(frameRate);m.WriteByte(flags);m.End(); }
@@ -616,6 +713,7 @@ void te_breakmodel(Vector pos, Vector size, Vector velocity, uint8 speedNoise=16
 void te_dlight(Vector pos, uint8 radius=16, Color c=PURPLE, uint8 life=255, uint8 decayRate=4, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_DLIGHT);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteByte(radius);m.WriteByte(c.r);m.WriteByte(c.g);m.WriteByte(c.b);m.WriteByte(life);m.WriteByte(decayRate);m.End(); }
 void _te_decal(Vector pos, CBaseEntity@ plr, CBaseEntity@ brushEnt, string decal, NetworkMessageDest msgType, edict_t@ dest, int decalType) { int decalIdx = g_EngineFuncs.DecalIndex(decal); int entIdx = brushEnt is null ? 0 : brushEnt.entindex(); if (decalIdx == -1) {  if (plr !is null) decalIdx = 0;  else  { println("Invalid decal: " + decalIdx); return;  } } if (decalIdx > 511) {  println("Decal index too high (" + decalIdx + ")! Max decal index is 511.");  return; } if (decalIdx > 255) {  decalIdx -= 255;  if (decalType == TE_DECAL) decalType = TE_DECALHIGH;  else if (decalType == TE_WORLDDECAL) decalType = TE_WORLDDECALHIGH;  else println("Decal type " + decalType + " doesn't support indicies > 255"); } if (decalType == TE_DECAL and entIdx == 0) decalType = TE_WORLDDECAL; if (decalType == TE_DECALHIGH and entIdx == 0) decalType = TE_WORLDDECALHIGH; NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest); m.WriteByte(decalType); if (plr !is null) m.WriteByte(plr.entindex()); m.WriteCoord(pos.x); m.WriteCoord(pos.y); m.WriteCoord(pos.z); switch(decalType) {  case TE_DECAL: case TE_DECALHIGH: m.WriteByte(decalIdx); m.WriteShort(entIdx); break;  case TE_GUNSHOTDECAL: case TE_PLAYERDECAL: m.WriteShort(entIdx); m.WriteByte(decalIdx); break;  default: m.WriteByte(decalIdx); } m.End(); }
 void te_decal(Vector pos, CBaseEntity@ brushEnt=null, string decal="{handi", NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { _te_decal(pos, null, brushEnt, decal, msgType, dest, TE_DECAL); }
+void te_gunshotdecal(Vector pos, CBaseEntity@ brushEnt=null, string decal="{handi", NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { _te_decal(pos, null, brushEnt, decal, msgType, dest, TE_GUNSHOTDECAL); }
 void te_usertracer(Vector pos, Vector dir, float speed=6000.0f, uint8 life=32, uint color=4, uint8 length=12, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { Vector velocity = dir*speed;NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_USERTRACER);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteCoord(velocity.x);m.WriteCoord(velocity.y);m.WriteCoord(velocity.z);m.WriteByte(life);m.WriteByte(color);m.WriteByte(length);m.End();}
 void te_tracer(Vector start, Vector end, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_TRACER);m.WriteCoord(start.x);m.WriteCoord(start.y);m.WriteCoord(start.z);m.WriteCoord(end.x);m.WriteCoord(end.y);m.WriteCoord(end.z);m.End(); }
 void te_spritetrail(Vector start, Vector end, string sprite="sprites/hotglow.spr", uint8 count=2, uint8 life=0, uint8 scale=1, uint8 speed=16, uint8 speedNoise=8, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_SPRITETRAIL);m.WriteCoord(start.x);m.WriteCoord(start.y);m.WriteCoord(start.z);m.WriteCoord(end.x);m.WriteCoord(end.y);m.WriteCoord(end.z);m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteByte(life);m.WriteByte(scale);m.WriteByte(speedNoise);m.WriteByte(speed);m.End(); }
