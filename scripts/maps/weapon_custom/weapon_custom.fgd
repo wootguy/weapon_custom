@@ -57,19 +57,25 @@
 [
 	spawnflags(Flags) =
 	[
-		1 : "Shoot Bullet(s)" : 0
-		2 : "Shoot Projectile" : 0
-		4 : "Shoot Beam" : 0
+		1 : "" : 0
+		2 : "" : 0
+		4 : "" : 0
 		8 : "" : 0
 		16 : "Use Custom Explosion" : 0
-		32 : "Explosive bullets" : 0
+		32 : "" : 0
 		64 : "No Projectile Gravity" : 0
 		128 : "Works in water" : 0
-		256 : "No Bullet Decals" : 0
+		256 : "" : 0
 		512 : "Detonate Satchels" : 0
 		1024 : "No Autofire" : 0
 	]
 	targetname(target_source) : "Name"
+	shoot_type(choices) : "Shoot Type" : 0 =
+	[
+		0 : "Bullets"
+		1 : "Projectile"
+		2 : "Beam"
+	]
 	sounds(string) : "Shoot Sounds" : "weapons/glauncher.wav;weapons/glauncher2.wav"
 	ammo_cost(string) : "Ammo Cost" : "1"
 	cooldown(string) : "Cooldown" : "0.15"
@@ -107,6 +113,12 @@
 		1 : "Uniform"
 	]
 	bullet_delay(string) : "Bullet Burst Fire Delay" : "0"
+	bullet_impact(choices) : "Bullet Impact Mode" : 0 =
+	[
+		0: "Standard"
+		1 : "Melee"
+		2 : "Explode"	
+	]
 	bullet_color(choices) : "Bullet Tracers" : 4 =
 	[
 		-1: "None"
@@ -118,6 +130,52 @@
 		7 : "Purple"
 		5 : "Yellow"
 		11 : "Pink"		
+	]
+	bullet_decal(choices) : "Bullet Decal" : 24 =
+	[	
+		-2 : "None"
+		24 : "Bullet"
+		1 : "Bullet (Large)"
+		15 : "Bullet (Huge)" // gaussshot
+		5 : "Bullet (Breakable Glass)"
+		4 : "Bullet (Bulletproof Glass)"
+		
+		-2 : ""
+		2 : "Red Blood"
+		0 : "Red Blood (Large)"
+		3 : "Red Blood Hands"
+		32 : "Yellow Blood"
+		29 : "Yellow Blood (Large)"
+		28 : "Bullsquid Spit"
+		18 : "Big Momma Goo"			
+		22 : "Oil"
+		
+		-2 : ""
+		7 : "Small Crack"
+		8 : "Large Crack"
+		9 : "Large Dent"
+		10 : "Small Dent"
+		11 : "Small Ding"
+		12 : "Rust"
+		
+		-2 : ""
+		21 : "Tiny Scortch"
+		26 : "Tiny Scortch 2"
+		19 : "Small Scortch"
+		27 : "Small Scortch 2"
+		20 : "Medium Scortch"
+		23 : "Large Scortch"
+		14 : "Garg Stomp"
+		
+		-2 : ""
+		13 : "Footprints"
+		6 : "Alphabet"
+		25 : "Numbers"
+		//16 : "Grafitti"
+		//17 : "Handicap Sign"
+		//30 : "Target"
+		31 : "Tire Tracks"
+		-1 : "Player Spray"
 	]
 	
 	projectile_type(choices) : "Projectile" : 0 =
@@ -168,7 +226,52 @@
 	projectile_impact_dmg(string) : "Projectile Custom Impact Damage" : "100"
 	projectile_impact_snd(string) : "Projectile Custom Impact Sound" : "weapons/pwach.wav"
 	projectile_bounce_snd(string) : "Projectile Custom Bounce Sound" : "weapons/pwach.wav"
-	projectile_bounce_decal(string) : "Projectile Custom Bounce Decal" : ""
+	projectile_bounce_decal(choices) : "Projectile Custom Bounce Decal" : -2 =
+	[	
+		-2 : "None"
+		24 : "Bullet"
+		1 : "Bullet (Large)"
+		15 : "Bullet (Huge)" // gaussshot
+		5 : "Bullet (Breakable Glass)"
+		4 : "Bullet (Bulletproof Glass)"
+		
+		-2 : ""
+		2 : "Red Blood"
+		0 : "Red Blood (Large)"
+		3 : "Red Blood Hands"
+		32 : "Yellow Blood"
+		29 : "Yellow Blood (Large)"
+		28 : "Bullsquid Spit"
+		18 : "Big Momma Goo"			
+		22 : "Oil"
+		
+		-2 : ""
+		7 : "Small Crack"
+		8 : "Large Crack"
+		9 : "Large Dent"
+		10 : "Small Dent"
+		11 : "Small Ding"
+		12 : "Rust"
+		
+		-2 : ""
+		21 : "Tiny Scortch"
+		26 : "Tiny Scortch 2"
+		19 : "Small Scortch"
+		27 : "Small Scortch 2"
+		20 : "Medium Scortch"
+		23 : "Large Scortch"
+		14 : "Garg Stomp"
+		
+		-2 : ""
+		13 : "Footprints"
+		6 : "Alphabet"
+		25 : "Numbers"
+		//16 : "Grafitti"
+		//17 : "Handicap Sign"
+		//30 : "Target"
+		31 : "Tire Tracks"
+		-1 : "Player Spray"
+	]
 	
 	beam_impact_spr(string) : "Beam Impact Sprite" : "sprites/xspark1.spr"
 	beam_ricochet_limit(integer) : "Beam Ricochet Limit" : 3
@@ -210,7 +313,52 @@
 	explode_dmg(string) : "Custom Explosion Damage" : "100"
 	explode_spr(string) : "Custom Explosion Sprite" : "sprites/fexplo.spr"
 	explode_snd(string) : "Custom Explosion Sound" : "weapons/mortarhit.wav"
-	explode_decal(string) : "Custom Explosion Decal" : "{handi"
+	explode_decal(choices) : "Custom Explosion Decal" : 24 =
+	[	
+		-2 : "None"
+		24 : "Bullet"
+		1 : "Bullet (Large)"
+		15 : "Bullet (Huge)" // gaussshot
+		5 : "Bullet (Breakable Glass)"
+		4 : "Bullet (Bulletproof Glass)"
+		
+		-2 : ""
+		2 : "Red Blood"
+		0 : "Red Blood (Large)"
+		3 : "Red Blood Hands"
+		32 : "Yellow Blood"
+		29 : "Yellow Blood (Large)"
+		28 : "Bullsquid Spit"
+		18 : "Big Momma Goo"			
+		22 : "Oil"
+		
+		-2 : ""
+		7 : "Small Crack"
+		8 : "Large Crack"
+		9 : "Large Dent"
+		10 : "Small Dent"
+		11 : "Small Ding"
+		12 : "Rust"
+		
+		-2 : ""
+		21 : "Tiny Scortch"
+		26 : "Tiny Scortch 2"
+		19 : "Small Scortch"
+		27 : "Small Scortch 2"
+		20 : "Medium Scortch"
+		23 : "Large Scortch"
+		14 : "Garg Stomp"
+		
+		-2 : ""
+		13 : "Footprints"
+		6 : "Alphabet"
+		25 : "Numbers"
+		//16 : "Grafitti"
+		//17 : "Handicap Sign"
+		//30 : "Target"
+		31 : "Tire Tracks"
+		-1 : "Player Spray"
+	]
 	explode_smoke_spr(string) : "Custom Explosion Smoke Sprite" : "sprites/steam1.spr"
 	explode_dlight(color255) : "Custom Explosion Light (R G B D)" : "0 255 0 200"
 	explode_gibs(integer) : "Custom Explosion Gibs (0-255)" : 8
@@ -227,7 +375,52 @@
 
 	rico_angle(string) : "Ricochet Max Angle (Degrees)" : "0"
 	rico_snds(string) : "Ricochet Sounds" : "weapons/ric1.wav;weapons/ric2.wav;weapons/ric3.wav;weapons/ric4.wav;weapons/ric5.wav"
-	rico_decal(string) : "Ricochet Decal" : "{handi"
+	rico_decal(choices) : "Ricochet Decal" : 24 =
+	[	
+		-2 : "None"
+		24 : "Bullet"
+		1 : "Bullet (Large)"
+		15 : "Bullet (Huge)" // gaussshot
+		5 : "Bullet (Breakable Glass)"
+		4 : "Bullet (Bulletproof Glass)"
+		
+		-2 : ""
+		2 : "Red Blood"
+		0 : "Red Blood (Large)"
+		3 : "Red Blood Hands"
+		32 : "Yellow Blood"
+		29 : "Yellow Blood (Large)"
+		28 : "Bullsquid Spit"
+		18 : "Big Momma Goo"			
+		22 : "Oil"
+		
+		-2 : ""
+		7 : "Small Crack"
+		8 : "Large Crack"
+		9 : "Large Dent"
+		10 : "Small Dent"
+		11 : "Small Ding"
+		12 : "Rust"
+		
+		-2 : ""
+		21 : "Tiny Scortch"
+		26 : "Tiny Scortch 2"
+		19 : "Small Scortch"
+		27 : "Small Scortch 2"
+		20 : "Medium Scortch"
+		23 : "Large Scortch"
+		14 : "Garg Stomp"
+		
+		-2 : ""
+		13 : "Footprints"
+		6 : "Alphabet"
+		25 : "Numbers"
+		//16 : "Grafitti"
+		//17 : "Handicap Sign"
+		//30 : "Target"
+		31 : "Tire Tracks"
+		-1 : "Player Spray"
+	]
 	rico_part_count(integer) : "Ricochet Particle Count" : 3
 	rico_part_spr(string) : "Ricochet Particle Sprite" : "sprites/hotglow.spr"
 	rico_part_scale(integer) : "Ricochet Particle Scale (1-255)" : 1
