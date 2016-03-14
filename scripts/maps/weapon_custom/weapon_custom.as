@@ -154,6 +154,24 @@ enum explosion_types
 	EXPLODE_TORUS
 }
 
+enum windup_ease
+{
+	EASE_NONE,
+	EASE_IN,
+	EASE_OUT,
+	EASE_INOUT,
+	EASE_IN_HEAVY,
+	EASE_OUT_HEAVY,
+	EASE_INOUT_HEAVY
+}
+
+enum windup_actions
+{
+	WINDUP_SHOOT_ON_RELEASE,
+	WINDUP_SHOOT_ONCE,
+	WINDUP_SHOOT_CONSTANT,
+}
+
 class BeamOptions
 {
 	int type;
@@ -240,6 +258,15 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int rico_trace_count;
 	int rico_trace_color;
 	int rico_trace_speed;
+	
+	float windup_time;
+	float wind_down_time;
+	float windup_mult;
+	string windup_snd;
+	int windup_pitch_start;
+	int windup_pitch_end;
+	int windup_easing;
+	int windup_action;
 	
 	array<BeamOptions> beams = {BeamOptions(), BeamOptions()};
 
@@ -330,6 +357,15 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "rico_trace_speed") rico_trace_speed = atoi(szValue);
 		else if (szKey == "rico_trace_color") rico_trace_color = atoi(szValue);
 		else if (szKey == "rico_angle") 	  rico_angle = atof(szValue);
+		
+		else if (szKey == "windup_time") 	  windup_time = atof(szValue);
+		else if (szKey == "wind_down_time") 	  wind_down_time = atof(szValue);
+		else if (szKey == "windup_mult") 	  windup_mult = atof(szValue);
+		else if (szKey == "windup_snd") 	  windup_snd = szValue;
+		else if (szKey == "windup_pitch_start") windup_pitch_start = atoi(szValue);
+		else if (szKey == "windup_pitch_end") 	windup_pitch_end = atoi(szValue);
+		else if (szKey == "windup_easing") 		windup_easing = atoi(szValue);
+		else if (szKey == "windup_action") 		windup_action = atoi(szValue);
 		
 		else return BaseClass.KeyValue( szKey, szValue );
 		
@@ -430,21 +466,15 @@ class weapon_custom_shoot : ScriptBaseEntity
 			PrecacheModel( "models/shell.mdl" );
 			PrecacheSound( "weapons/ofmortar.wav" );
 		}
-		if (projectile.model.Length() > 0)
-			PrecacheModel( projectile.model );
-		if (projectile.sprite.Length() > 0)
-			PrecacheModel( projectile.sprite );
+		PrecacheModel( projectile.model );
+		PrecacheModel( projectile.sprite );
 		if (projectile.trail_spr.Length() > 0)
 			projectile.trail_sprId = PrecacheModel( projectile.trail_spr );
 			
-		if (explode_spr.Length() > 0)
-			PrecacheModel( explode_spr );
-		if (explode_smoke_spr.Length() > 0)
-			PrecacheModel( explode_smoke_spr );
-		if (explode_gib_mdl.Length() > 0)
-			PrecacheModel( explode_gib_mdl );
-		if (explode_snd.Length() > 0)
-			PrecacheSound( explode_snd );
+		PrecacheModel( explode_spr );
+		PrecacheModel( explode_smoke_spr );
+		PrecacheModel( explode_gib_mdl );
+		PrecacheSound( explode_snd );
 			
 		if (projectile.entity_class.Length() > 0)
 			g_Game.PrecacheOther( projectile.entity_class );
@@ -454,6 +484,8 @@ class weapon_custom_shoot : ScriptBaseEntity
 		}
 		if (rico_part_spr.Length() > 0)
 			PrecacheModel(rico_part_spr);
+			
+		PrecacheSound(windup_snd);
 			
 		
 		PrecacheModel( "models/HVR.mdl" );
