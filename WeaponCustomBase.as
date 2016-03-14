@@ -33,6 +33,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	float nextBurstFire = 0;
 	int numBurstFires = 0;
 	
+	bool windingUp = false;
+	bool windupSoundActive = false;
+	bool windingDown = false;
+	float windupStart = 0;
+	float lastWindupInc = 0;
+	
 	weapon_custom_shoot@ active_opts; // active shoot opts
 	int active_fire = -1;
 	
@@ -421,9 +427,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				
 				if (ent !is null)
 				{
-					if (ent.entindex() != 0) // impact if not world
-						@impacts[i].ent = ent;
-					if (ent.entindex() != 0)
+					if (ent.ReflectGauss()) 
+						@impacts[i].ent = ent; // don't ricochet of things that take damage
+					if (!ent.ReflectGauss())
 					{
 						if (ent.IsMonster()) {
 							ent.pev.velocity = ent.pev.velocity + dir*active_opts.knockback;
@@ -630,6 +636,140 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		}
 	}
 	
+	float WindupEase(float p, float q, int func, bool inverse)
+	{
+		if (inverse)
+		{
+			// easing functions are reveresed for smooth transitions in the middle of a windup
+			p = 1.0f - p;
+			q = 1.0f - q;
+			switch(active_opts.windup_easing)
+			{
+				case EASE_IN:          func = EASE_OUT;       break;
+				case EASE_OUT:         func = EASE_IN;        break;
+				case EASE_IN_HEAVY:    func = EASE_OUT_HEAVY; break;
+				case EASE_OUT_HEAVY:   func = EASE_IN_HEAVY;  break;
+			}
+		}
+		switch(func)
+		{
+			case EASE_IN:          p = p*p;                     break;
+			case EASE_OUT:         p = 1.0f - q*q;              break;
+			case EASE_INOUT:       p = p*p / (p*p + q*q);       break;
+			case EASE_IN_HEAVY:    p = p*p*p;                   break;
+			case EASE_OUT_HEAVY:   p = 1.0f - q*q*q;            break;
+			case EASE_INOUT_HEAVY: p = p*p*p / (p*p*p + q*q*q); break;
+		}
+		return p;
+	}
+	
+	void WindupThink()
+	{
+		float timePassed = g_Engine.time - windupStart;
+		bool shouldWindDown = active_opts.wind_down_time > 0;
+		if (self.m_pPlayer.pev.button & 1 == 0)
+		{			
+			if (shouldWindDown)
+			{
+				float p = Math.min(1.0f, timePassed / active_opts.wind_down_time); // progress
+				float q = 1.0f - p; // inverse progress
+				if (!windingDown)
+				{
+					windingDown = true;
+					float ip = 1.0f - Math.min(1.0f, timePassed / active_opts.windup_time);
+					windupStart = g_Engine.time - ip*active_opts.wind_down_time;
+				}
+				else // winding down
+				{
+					if (timePassed >= active_opts.wind_down_time)
+					{
+						// wind down finished
+						windingUp = false;
+						windupSoundActive = false;
+						windingDown = false;
+						g_SoundSystem.StopSound( self.m_pPlayer.edict(), CHAN_BODY, active_opts.windup_snd, false);
+					}
+					else
+					{
+						p = WindupEase(p, q, active_opts.windup_easing, true);
+						float delta = active_opts.windup_pitch_end - active_opts.windup_pitch_start;
+						int newPitch = active_opts.windup_pitch_start + int(delta*p + 0.5f);
+						//println("T : " + newPitch);
+						
+						g_SoundSystem.PlaySound( self.m_pPlayer.edict(), CHAN_BODY, active_opts.windup_snd, 
+													1.0, ATTN_NORM, SND_CHANGE_PITCH, newPitch);
+					}
+					
+				}
+			} 
+			else // fire a bullet at the current windup and stop
+			{
+				DoAttack();
+				windingUp = false;
+				windupSoundActive = false;
+				windingDown = false;
+			}
+			
+		}
+		else
+		{
+			float p = Math.min(1.0f, timePassed / active_opts.windup_time); // progress
+			float q = 1.0f - p; // inverse progress
+			if (windingDown)
+			{
+				windingDown = false;
+				float ip = 1.0f - Math.min(1.0f, timePassed / active_opts.wind_down_time);
+				windupStart = g_Engine.time - ip*active_opts.windup_time;
+				println("WIND UP AT: " + q);
+			}
+			bool playWindupDuringShoot = true;
+			if (!windupSoundActive)
+			{
+				g_SoundSystem.PlaySound( self.m_pPlayer.edict(), CHAN_WEAPON, active_opts.windup_snd, 
+											1.0, ATTN_NORM, 0, 512 );
+											
+				windupSoundActive = true;
+			}
+			else if (timePassed < active_opts.windup_time or playWindupDuringShoot)
+			{
+				p = WindupEase(p, q, active_opts.windup_easing, false);
+				float delta = active_opts.windup_pitch_end - active_opts.windup_pitch_start;
+				int newPitch = active_opts.windup_pitch_start + int(delta*p + 0.5f);
+				//println("T : " + newPitch);
+				
+				g_SoundSystem.PlaySound( self.m_pPlayer.edict(), CHAN_BODY, active_opts.windup_snd, 
+											1.0, ATTN_NORM, SND_CHANGE_PITCH, newPitch);
+			}
+			if (timePassed > active_opts.windup_time)
+			{
+				if (active_opts.windup_action == WINDUP_SHOOT_ONCE)
+				{
+					windingUp = false;
+					windupSoundActive = true;
+					if (AllowedToShoot())
+						DoAttack();
+						
+				}
+				if (active_opts.windup_action == WINDUP_SHOOT_CONSTANT)
+				{
+					if (AllowedToShoot())
+					{
+						if (cooldownFinished())
+							DoAttack();
+					}
+					else
+					{
+						if (!shouldWindDown)
+						{
+							windingUp = false;
+							windupSoundActive = true;
+						}
+					}
+				}
+			}
+		}
+	}
+	
 	void WeaponThink()
 	{		
 		if (self.m_pPlayer is null)
@@ -674,6 +814,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					burstFiring = false;
 			}
 		}
+		else if (windingUp)
+		{
+			WindupThink();
+		}
 		else if (!canShootAgain)
 		{
 			// wait for user to stop holding trigger
@@ -684,6 +828,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		else
 			return;
 		self.pev.nextthink = g_Engine.time;
+	}
+	
+	bool cooldownFinished()
+	{
+		float nextAttack = active_fire == 0 ? self.m_flNextPrimaryAttack : self.m_flNextSecondaryAttack;
+		return nextAttack <= g_Engine.time;
 	}
 	
 	// do everything except actually shooting something
@@ -771,6 +921,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			self.pev.nextthink = g_Engine.time;
 		}
 		
+		if (windingUp)
+			return false;
+		
 		return AllowedToShoot();
 	}
 	
@@ -803,6 +956,15 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		if (!CanStartAttack())
 			return;
+			
+		if (active_opts.windup_time > 0 and !windingUp)
+		{
+			windingUp = true;
+			windingDown = false;
+			windupStart = g_Engine.time;
+			self.pev.nextthink = g_Engine.time;
+			return;
+		}
 		
 		DoAttack();
 	}

@@ -428,4 +428,27 @@
 	rico_trace_count(integer) : "Ricochet Tracers" : 3
 	rico_trace_color(integer) : "Ricochet Tracer Color (0-255)" : 4
 	rico_trace_speed(integer) : "Ricochet Tracer Speed (0-6000)" : 1024
+	
+	windup_time(string) : "Windup Time" : "0"
+	windup_action(choices) : "Windup Action" : 0 =
+	[	
+		0 : "Shoot On Release"
+		1 : "Shoot Once"
+		2 : "Shoot Constant"
+	]
+	wind_down_time(string) : "Wind Down Time" : "0"
+	windup_mult(string) : "Windup Damage Multiplier" : "3"
+	windup_easing(choices) : "Windup Easing" : 0 =
+	[	
+		0 : "None"
+		1 : "Ease In"
+		2 : "Ease Out"
+		3 : "Ease In + Ease Out"
+		4 : "Ease In (Heavy)"
+		5 : "Ease Out (Heavy)"
+		6 : "Ease In + Ease Out (Heavy)"
+	]
+	windup_snd(string) : "Windup Sound" : "ambience/pulsemachine.wav"
+	windup_pitch_start(string) : "Windup Pitch Start (0-255)" : "90"
+	windup_pitch_end(string) : "Windup Pitch End (0-255)" : "130"
 ]
