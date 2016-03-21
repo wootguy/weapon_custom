@@ -278,18 +278,18 @@ Vector spreadDir(Vector dir, float degrees, int spreadFunc=SPREAD_UNIFORM)
 }
 
 int g_ambientId = 0;
-void ambientSound(Vector origin, string soundFile, int flags)
+void ambientSound(Vector origin, WeaponSound@ soundFile, int flags)
 {
 	// play global sound
 	string ambientName = "weapon_custom__" + g_ambientId;
 	dictionary keyvalues;
 	keyvalues["origin"] = origin.ToString();
 	keyvalues["targetname"] = ambientName;
-	keyvalues["message"] = soundFile;
-	keyvalues["pitch"] = "100";
+	keyvalues["message"] = soundFile.file;
+	keyvalues["pitch"] = string(soundFile.getPitch());
 	keyvalues["spawnflags"] = "" + flags;
 	keyvalues["playmode"] = "1";
-	keyvalues["health"] = "10";
+	keyvalues["health"] = string(soundFile.getVolume()*10);
 
 	CBaseEntity@ ambient = g_EntityFuncs.CreateEntity( "ambient_generic", keyvalues, true );
 	g_EntityFuncs.FireTargets(ambientName, null, null, USE_ON);
@@ -302,6 +302,7 @@ void ambientSound(Vector origin, string soundFile, int flags)
 class DecalTarget
 {
 	Vector pos;
+	TraceResult tr;
 	CBaseEntity@ ent; // for when the target is a brush entity, not the world (0 = world)
 }
 
@@ -350,6 +351,7 @@ DecalTarget getProjectileDecalTarget(CBaseEntity@ ent, float searchDist)
 		if (tr.flFraction < 1.0 and tr.pHit !is null)
 		{
 			decalTarget.pos = tr.vecEndPos;
+			decalTarget.tr = tr;
 			@decalTarget.ent = g_EntityFuncs.Instance( tr.pHit );
 			return decalTarget;
 		}
@@ -426,6 +428,11 @@ class WeaponCustomProjectile : ScriptBaseEntity
 	Vector attachStartDir; // our initial direction when attaching to the entity
 	int attachTime = 0;
 	
+	bool move_snd_playing = false;
+	string pickup_classname;
+	bool weaponPickup = false;
+	float pickupRadius = 64.0f;
+	
 	
 	void Spawn()
 	{
@@ -438,11 +445,14 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		
 		pev.mins = Vector(-options.size, -options.size, -options.size);
 		pev.maxs = Vector(options.size, options.size, options.size);
-		pev.mins = Vector(0.1, 0.1, 0.1);
-		pev.friction = 1.0f - options.elasticity;
+		pev.angles = pev.angles + options.angles;
+		pev.avelocity = options.avel;
+		//pev.friction = 1.0f - options.elasticity;
 		
 		SetThink( ThinkFunction( MoveThink ) );
 		self.pev.nextthink = g_Engine.time + thinkDelay;
+		
+		move_snd_playing = options.move_snd.play(self, CHAN_BODY);
 	}
 	
 	void MoveThink()
@@ -470,7 +480,42 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		}
 		else
 		{
-			g_EngineFuncs.VecToAngles(self.pev.velocity, self.pev.angles);
+			if (shoot_opts.pev.spawnflags & FL_SHOOT_PROJ_NO_ORIENT == 0)
+				g_EngineFuncs.VecToAngles(self.pev.velocity, self.pev.angles);
+		}
+		
+		if (move_snd_playing and pev.velocity.Length() == 0)
+			options.move_snd.stop(self, CHAN_BODY);
+		
+		if (weaponPickup)
+		{
+			if (pev.velocity.Length() < 128)
+			{
+				if ( pev.flags & FL_ONGROUND != 0 )
+				{
+					pev.angles.x = 0;
+					pev.angles.z = 0;
+				}
+				
+				CBaseEntity@ ent = null;
+				do {
+					@ent = g_EntityFuncs.FindEntityInSphere(ent, pev.origin, pickupRadius, "player", "classname"); 
+					if (ent !is null)
+					{
+						CBasePlayer@ plr = cast<CBasePlayer@>(ent);
+						plr.SetItemPickupTimes(0);
+						if (plr.HasNamedPlayerItem(pickup_classname) !is null)
+						{
+							// play the pickup sound even if they already have the weapon
+							g_SoundSystem.EmitSoundDyn( plr.edict(), CHAN_ITEM, "items/gunpickup2.wav", 1.0, 
+														ATTN_NORM, 0, 100 );
+						}
+						else
+							plr.GiveNamedItem(pickup_classname, 0, 0);
+						uninstall_steam_and_kill_yourself();
+					}
+				} while (ent !is null);
+			}
 		}
 		
 		self.pev.nextthink = g_Engine.time + thinkDelay;
@@ -478,6 +523,8 @@ class WeaponCustomProjectile : ScriptBaseEntity
 	
 	void uninstall_steam_and_kill_yourself()
 	{
+		if (move_snd_playing)
+			options.move_snd.stop(self, CHAN_BODY);
 		g_EntityFuncs.Remove(self);
 		if (spriteAttachment)
 			g_EntityFuncs.Remove(spriteAttachment);
@@ -487,6 +534,66 @@ class WeaponCustomProjectile : ScriptBaseEntity
 	{
 		if (ent.IsMonster())
 			ent.pev.velocity = ent.pev.velocity + pev.velocity.Normalize() * shoot_opts.knockback;
+	}
+	
+	void DamageTarget(CBaseEntity@ ent)
+	{	
+		if (ent is null or ent.entindex() == 0)
+			return;
+		CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
+			
+		// damage done before hitgroup multipliers
+		float baseDamage = options.impact_dmg;
+		
+		baseDamage = applyDamageModifiers(baseDamage, ent, owner, shoot_opts);
+		
+		TraceResult tr;
+		Vector vecSrc = pev.origin;
+		Vector vecAiming = pev.velocity.Normalize();
+		Vector vecEnd = vecSrc + vecAiming * pev.velocity.Length()*2;
+		g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, self.edict(), tr );
+		CBaseEntity@ pHit = tr.pHit !is null ? g_EntityFuncs.Instance( tr.pHit ) : null;
+		//te_beampoints(vecSrc, tr.vecEndPos);
+		if ( tr.flFraction >= 1.0 or pHit.entindex() != ent.entindex())
+		{
+			// This does a trace in the form of a box so there is a much higher chance of hitting something
+			// From crowbar.cpp in the hlsdk:
+			g_Utility.TraceHull( vecSrc, vecEnd, dont_ignore_monsters, head_hull, self.edict(), tr );
+			if ( tr.flFraction < 1.0 )
+			{
+				// Calculate the point of intersection of the line (or hull) and the object we hit
+				// This is and approximation of the "best" intersection
+				@pHit = g_EntityFuncs.Instance( tr.pHit );
+				if ( pHit is null or pHit.IsBSPModel() )
+					g_Utility.FindHullIntersection( vecSrc, tr, tr, VEC_DUCK_HULL_MIN, VEC_DUCK_HULL_MAX, self.edict() );
+				vecEnd = tr.vecEndPos;	// This is the point on the actual surface (the hull could have hit space)
+				vecAiming = (vecEnd - vecSrc).Normalize();
+			}
+		}
+		
+		g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
+		ent.TraceAttack(owner.pev, baseDamage, vecAiming, tr, DMG_CLUB);
+		g_WeaponFuncs.ApplyMultiDamage(ent.pev, owner.pev);
+		
+		WeaponSound@ impact_snd;
+		if ((ent.IsMonster() or ent.IsPlayer()) and !ent.IsMachine())
+			@impact_snd = shoot_opts.getRandomMeleeFleshSound();
+		else
+			@impact_snd = shoot_opts.getRandomMeleeHitSound();
+			
+		if (impact_snd !is null)
+			impact_snd.play(self, CHAN_WEAPON);
+	}
+	
+	void ConvertToWeapon()
+	{
+		if (options.type == PROJECTILE_WEAPON)
+		{
+			pev.angles.z = 0;
+			weaponPickup = true;
+			if (move_snd_playing)
+				options.move_snd.stop(self, CHAN_BODY);
+		}
 	}
 	
 	void Touch( CBaseEntity@ pOther )
@@ -499,7 +606,21 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		else
 			event = options.monster_event;
 			
+		DecalTarget dt;
+		
+		pev.velocity = pev.velocity*options.elasticity;
+		
+		if (weaponPickup)
+		{
+			// no more special effects after the first impact (pretend we're a weaponbox)
+			custom_ricochet_sound(shoot_opts, self);
+			pev.avelocity.x *= -0.9;
+			return;
+		}
+		
+		DamageTarget(pOther);
 		KnockTarget(pOther);
+		
 		switch(event)
 		{
 			case PROJ_ACT_EXPLODE:
@@ -518,14 +639,63 @@ class WeaponCustomProjectile : ScriptBaseEntity
 				pev.velocity = Vector(0,0,0);
 				attached = true;
 				return;
+			case PROJ_ACT_BOUNCE_RICO:
+				dt = getProjectileDecalTarget(self, 0);
+				custom_ricochet(dt.pos, dt.tr.vecPlaneNormal, shoot_opts, self, dt.ent);
+				ConvertToWeapon();
+				return;
+			case PROJ_ACT_BOUNCE_EXP:
+				explode_custom_projectile(@self, shoot_opts);
+				ConvertToWeapon();
+				return;
+			case PROJ_ACT_BOUNCE_RICO_EXP:
+				dt = getProjectileDecalTarget(self, 0);
+				custom_ricochet(dt.pos, dt.tr.vecPlaneNormal, shoot_opts, self, dt.ent);
+				explode_custom_projectile(@self, shoot_opts);
+				ConvertToWeapon();
+				return;
 		}
-			
-		if (options.bounce_decal != DECAL_NONE)
-		{
-			DecalTarget dt = getProjectileDecalTarget(self, 0);
-			te_decal(dt.pos, dt.ent, getDecal(options.bounce_decal));
-		}
+		
+		ConvertToWeapon();
 	}
+}
+
+int getRandomPitch(int variance)
+{
+	return Math.RandomLong(100-variance, 100+variance);
+}
+
+void custom_ricochet_sound(weapon_custom_shoot@ opts, CBaseEntity@ owner)
+{
+	WeaponSound@ rico_snd = opts.getRandomRicochetSound();
+	if (rico_snd !is null)
+	{
+		rico_snd.play(owner, CHAN_STATIC);
+	}
+}
+
+void custom_ricochet(Vector pos, Vector dir, weapon_custom_shoot@ opts, CBaseEntity@ owner, CBaseEntity@ decalEnt)
+{
+	if (opts.rico_part_count > 0)
+	{
+		te_spritetrail(pos, pos + dir, opts.rico_part_spr, 
+					   opts.rico_part_count, 0, opts.rico_part_scale, 
+					   opts.rico_part_speed/2, opts.rico_part_speed);
+	}
+	if (opts.rico_trace_count > 0)
+	{
+		te_streaksplash(pos, dir, opts.rico_trace_color,
+						opts.rico_trace_count, opts.rico_trace_speed/2, opts.rico_trace_speed);
+	}
+	if (opts.rico_decal != DECAL_NONE)
+	{
+		te_decal(pos, decalEnt, getBulletDecalOverride(decalEnt, getDecal(opts.rico_decal)));
+	}
+	if (opts.pev.spawnflags & FL_SHOOT_RICO_SPARKS != 0)
+	{
+		te_sparks(pos);
+	}
+	custom_ricochet_sound(opts, owner);
 }
 
 void explode_custom_projectile(CBaseEntity@ ent, weapon_custom_shoot@ shoot_opts)
@@ -540,7 +710,7 @@ void explode_custom_projectile(CBaseEntity@ ent, weapon_custom_shoot@ shoot_opts
 		case EXPLODE_SPRITE:
 		{
 			int flags = 2;
-			if (shoot_opts.explode_snd.Length() > 0)
+			if (shoot_opts.explode_snd.file.Length() > 0 or true)
 				flags |= 4;
 			te_explosion(ent.pev.origin, shoot_opts.explode_spr, scale, 30, flags);
 			smokeDelay = 0.4;
@@ -559,24 +729,23 @@ void explode_custom_projectile(CBaseEntity@ ent, weapon_custom_shoot@ shoot_opts
 	
 	if (shoot_opts.explode_smoke_spr.Length() > 0)
 		g_Scheduler.SetTimeout("delayed_smoke", smokeDelay, ent.pev.origin, shoot_opts.explode_smoke_spr, smokeScale);
-	if (shoot_opts.explode_snd.Length() > 0)
+	if (shoot_opts.explode_snd.file.Length() > 0)
 		ambientSound(ent.pev.origin, shoot_opts.explode_snd, 40);
 	if (shoot_opts.explode_light.a > 0)
 		te_dlight(ent.pev.origin, dscale, shoot_opts.explode_light, 255, 50);
 		
-	shoot_opts.explode_gibs = 8;
 	if (shoot_opts.explode_gibs > 0)
 	{
 		te_breakmodel(ent.pev.origin, Vector(2,2,2), ent.pev.velocity, smokeScale, 
 					  shoot_opts.explode_gib_mdl, shoot_opts.explode_gibs, 5, shoot_opts.explode_gib_mat | 16);
 	}
 
-	if (shoot_opts.explode_decal.Length() > 0)
+	if (shoot_opts.explode_decal != DECAL_NONE)
 	{
 		// search is distance > 0 because it's unlikely that a projectile will be 
 		// touching a surface when its life expires.
 		DecalTarget dt = getProjectileDecalTarget(ent, 32.0f);
-		te_decal(dt.pos, dt.ent, shoot_opts.explode_decal);
+		te_decal(dt.pos, dt.ent, getDecal(shoot_opts.explode_decal));
 	}
 }
 
@@ -602,6 +771,11 @@ void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ sho
 		CBaseEntity@ ent = sprite;
 		g_EntityFuncs.Remove(ent);
 	}
+}
+
+void removeWeapon(CBasePlayerWeapon@ wep)
+{
+	wep.Killed(wep.pev, 0);
 }
 
 enum impact_decal_type
@@ -691,13 +865,58 @@ string getDecal(int decalType)
 	return decals[ Math.RandomLong(0, decals.length()-1) ];
 }
 
+bool isBreakableEntity(CBaseEntity@ ent)
+{
+	if (ent.pev.classname == "func_breakable")
+		return true;
+	if (ent.pev.classname == "func_door" or ent.pev.classname == "func_door_rotating")
+		return true; // TODO: Figure out how to check "breakable" keyvalue
+	return false;
+}
+
+float applyDamageModifiers(float damage, CBaseEntity@ target, CBaseEntity@ plr, weapon_custom_shoot@ shoot_opts)
+{
+	// don't do any damage if target is friendly and npc_kill is set to 0 or 2
+	bool ignoreDmg = false;
+	if (target.IsMonster()) {
+		CBaseMonster@ mon = cast<CBaseMonster@>(target);
+		if (mon.CheckAttacker(plr)) {
+			damage = 0;
+		}
+	}
+	
+	int rel = plr.IRelationship(target);
+	bool isFriendly = rel == R_AL or rel == R_NO;
+	bool isMachine = target.IsMachine() or target.IsBSPModel();
+	bool didHeal = false;
+	if (isFriendly)
+	{
+		bool repair = isMachine and shoot_opts.pev.spawnflags & FL_SHOOT_REPAIR != 0;
+		bool heal = !isMachine and shoot_opts.pev.spawnflags & FL_SHOOT_HEAL != 0;
+		if (heal or repair)
+		{
+			damage = -damage;
+			didHeal = true;
+		}
+	}
+	
+	// Award player with poitns (TODO: Account for hitgroup multipliers)
+	plr.pev.frags += target.GetPointsForDamage(didHeal ? -damage : damage);
+	
+	return damage;
+}
+
 // breakable glass uses a special decal when shot
 string getBulletDecalOverride(CBaseEntity@ ent, string currentDecal)
 {
-	// learned this from HLSDK func_break.cpp line 158
-	if (ent !is null and ent.pev.classname == "func_breakable" or ent.pev.classname == "func_door")
-		if (ent.pev.playerclass == 1)
+	TraceResult tr;
+	if (ent !is null and isBreakableEntity(ent))
+	{
+		if (ent.pev.playerclass == 1) // learned this from HLSDK func_break.cpp line 158
 			return getDecal(DECAL_GLASSBREAK);
+		if (ent.TakeDamage(ent.pev, ent.pev, 0, DMG_GENERIC) == 0) // only unbreakable glass can't take damage
+			return getDecal(DECAL_BULLETPROOF);
+	}
 	
 	return currentDecal;
 }
@@ -719,3 +938,7 @@ void te_tracer(Vector start, Vector end, NetworkMessageDest msgType=MSG_BROADCAS
 void te_spritetrail(Vector start, Vector end, string sprite="sprites/hotglow.spr", uint8 count=2, uint8 life=0, uint8 scale=1, uint8 speed=16, uint8 speedNoise=8, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_SPRITETRAIL);m.WriteCoord(start.x);m.WriteCoord(start.y);m.WriteCoord(start.z);m.WriteCoord(end.x);m.WriteCoord(end.y);m.WriteCoord(end.z);m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteByte(life);m.WriteByte(scale);m.WriteByte(speedNoise);m.WriteByte(speed);m.End(); }
 void te_streaksplash(Vector start, Vector dir, uint8 color=250, uint16 count=256, uint16 speed=2048, uint16 speedNoise=128, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_STREAK_SPLASH);m.WriteCoord(start.x);m.WriteCoord(start.y);m.WriteCoord(start.z);m.WriteCoord(dir.x);m.WriteCoord(dir.y);m.WriteCoord(dir.z);m.WriteByte(color);m.WriteShort(count);m.WriteShort(speed);m.WriteShort(speedNoise);m.End(); }
 void te_glowsprite(Vector pos, string sprite="sprites/glow01.spr", uint8 life=1, uint8 scale=10, uint8 alpha=255, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_GLOWSPRITE);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(life);m.WriteByte(scale);m.WriteByte(alpha);m.End(); }
+void te_bloodsprite(Vector pos, string sprite1="sprites/bloodspray.spr", string sprite2="sprites/blood.spr", uint8 color=70, uint8 scale=3, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_BLOODSPRITE);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteShort(g_EngineFuncs.ModelIndex(sprite1));m.WriteShort(g_EngineFuncs.ModelIndex(sprite2));m.WriteByte(color);m.WriteByte(scale);m.End(); }
+void te_beampoints(Vector start, Vector end, string sprite="sprites/laserbeam.spr", uint8 frameStart=0, uint8 frameRate=100, uint8 life=20, uint8 width=2, uint8 noise=0, Color c=GREEN, uint8 scroll=32, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_BEAMPOINTS);m.WriteCoord(start.x);m.WriteCoord(start.y);m.WriteCoord(start.z);m.WriteCoord(end.x);m.WriteCoord(end.y);m.WriteCoord(end.z);m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(frameStart);m.WriteByte(frameRate);m.WriteByte(life);m.WriteByte(width);m.WriteByte(noise);m.WriteByte(c.r);m.WriteByte(c.g);m.WriteByte(c.b);m.WriteByte(c.a);m.WriteByte(scroll);m.End(); }
+void _te_pointeffect(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null, int effect=TE_SPARKS) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(effect);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.End(); }
+void te_sparks(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { _te_pointeffect(pos, msgType, dest, TE_SPARKS); }
