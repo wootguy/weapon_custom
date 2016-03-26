@@ -87,7 +87,7 @@
 	weapon_priority(integer) : "Auto Switch Priority" : 5
 ]
 
-@PointClass size(-8 -8 -8, 8 8 8 ) color(255 255 128) = weapon_custom_sound : "Custom weapon sound settings"
+@PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 255) = weapon_custom_sound : "Custom weapon sound settings"
 [
 	spawnflags(Flags) =
 	[
@@ -115,12 +115,12 @@
 	noise(string) : "Linked Sound" : ""
 ]
 
-@PointClass size(-32 -8 -8, 32 8 8 ) color(255 216 0) = weapon_custom_shoot : "Custom weapon shoot event"
+@BaseClass = ShootGeneral
 [
 	spawnflags(Flags) =
 	[
-		1 : "Heal Friendlies" : 0
-		2 : "Repair Machines" : 0
+		1 : "Don't Fire On Damage" : 0
+		2 : "Don't Fire On Miss" : 0
 		4 : "No Melee Sound Overlap" : 0
 		8 : "Responsive Windup" : 0
 		16 : "Ricochet Sparks" : 0
@@ -132,12 +132,6 @@
 		1024 : "Detonate Satchels" : 0
 	]
 	targetname(target_source) : "Name"
-	shoot_type(choices) : "Shoot Type" : 0 =
-	[
-		0 : "Bullets / Melee"
-		1 : "Projectile"
-		2 : "Beam"
-	]
 	sounds(string) : "Shoot Sounds" : ""
 	shoot_anims(string) : "Shoot Animations" : ""
 	ammo_cost(string) : "Ammo Cost" : "1"
@@ -146,7 +140,27 @@
 	kickback(string) : "Kickback (User Push)" : "0"
 	knockback(string) : "Knockback (Target Push)" : "10"
 	max_range(string) : "Max Range" : "4096"
-	
+	heal_mode(choices) : "Heal Mode" : 0 =
+	[
+		0 : "Do Not Heal"
+		1 : "Heal Friends"
+		2 : "Heal Foes"
+		3 : "Heal Friends & Foes"
+	]
+	heal_targets(choices) : "Heal Targets" : 0 =
+	[
+		0 : "Humans Only"
+		1 : "Aliens Only"
+		2 : "Machines Only"
+		3 : "Breakables Only"
+		4 : "Machines & Breakables"
+		5 : "Humans & Aleins"
+		6 : "Everything"
+	]
+]
+
+@BaseClass = ShootBullet
+[
 	bullets(integer) : "Bullets" : 1
 	bullet_type(choices) : "Bullet Type (Damage)" : 1 =
 	[
@@ -179,8 +193,7 @@
 	bullet_impact(choices) : "Bullet Impact Mode" : 0 =
 	[
 		0: "Standard"
-		1 : "Melee"
-		2 : "Explode"	
+		1 : "Explode"	
 	]
 	bullet_color(choices) : "Bullet Tracers" : 4 =
 	[
@@ -240,12 +253,87 @@
 		31 : "Tire Tracks"
 		-1 : "Player Spray"
 	]
-	
+]
+
+@BaseClass = ShootMeleePartial
+[
 	melee_hit_sounds(string) : "Melee Hit Sounds" : ""
 	melee_flesh_sounds(string) : "Melee Hit Flesh Sounds" : ""
 	melee_anims(string) : "Melee Hit Animations" : ""
 	melee_miss_cooldown(string) : "Melee Miss Cooldown" : ""
-	
+]
+
+@BaseClass = ShootMelee
+[
+	bullets(integer) : "Melee Strikes" : 1
+	bullet_spread(string) : "Melee Spread (Degrees)" : "6"
+	bullet_spread_func(choices) : "Melee Spread Function" : 0 =
+	[
+		0 : "Gaussian"
+		1 : "Uniform"
+	]
+	bullet_damage(string) : "Melee Damage" : 10
+	bullet_delay(string) : "Melee Burst Fire Delay" : "0"
+	bullet_impact(choices) : "Impact Mode" : 0 =
+	[
+		0: "Standard"
+		1 : "Melee"
+		2 : "Explode"	
+	]
+	bullet_decal(choices) : "Impact Decal" : 24 =
+	[	
+		-2 : "None"
+		24 : "Bullet"
+		1 : "Bullet (Large)"
+		15 : "Bullet (Huge)" // gaussshot
+		5 : "Bullet (Breakable Glass)"
+		4 : "Bullet (Bulletproof Glass)"
+		
+		-2 : ""
+		2 : "Red Blood"
+		0 : "Red Blood (Large)"
+		3 : "Red Blood Hands"
+		32 : "Yellow Blood"
+		29 : "Yellow Blood (Large)"
+		28 : "Bullsquid Spit"
+		18 : "Big Momma Goo"			
+		22 : "Oil"
+		
+		-2 : ""
+		7 : "Small Crack"
+		8 : "Large Crack"
+		9 : "Large Dent"
+		10 : "Small Dent"
+		11 : "Small Ding"
+		12 : "Rust"
+		
+		-2 : ""
+		21 : "Tiny Scortch"
+		26 : "Tiny Scortch 2"
+		19 : "Small Scortch"
+		27 : "Small Scortch 2"
+		20 : "Medium Scortch"
+		23 : "Large Scortch"
+		14 : "Garg Stomp"
+		
+		-2 : ""
+		13 : "Footprints"
+		6 : "Alphabet"
+		25 : "Numbers"
+		//16 : "Grafitti"
+		//17 : "Handicap Sign"
+		//30 : "Target"
+		31 : "Tire Tracks"
+		-1 : "Player Spray"
+	]
+	melee_hit_sounds(string) : "Melee Hit Sounds" : ""
+	melee_flesh_sounds(string) : "Melee Hit Flesh Sounds" : ""
+	melee_anims(string) : "Melee Hit Animations" : ""
+	melee_miss_cooldown(string) : "Melee Miss Cooldown" : ""
+]
+
+@BaseClass = ShootProjectile
+[
 	projectile_type(choices) : "Projectile" : 0 =
 	[
 		0 : "AR Grenade"
@@ -302,7 +390,10 @@
 	]	
 	projectile_bounce(string) : "Projectile Custom Elasticity (0-1)" : "0.9"
 	projectile_impact_dmg(string) : "Projectile Custom Impact Damage" : "100"
-	
+]
+
+@BaseClass = ShootBeam
+[
 	beam_impact_spr(string) : "Beam Impact Sprite" : ""
 	beam_ricochet_limit(integer) : "Beam Ricochet Limit" : 3
 	beam1_type(choices) : "Beam 1 Type" : 0 =
@@ -331,7 +422,40 @@
 	beam2_width(integer) : "Beam 2 Width (1-255)" : 8
 	beam2_noise(integer) : "Beam 2 Noise (0-255)" : 32
 	beam2_scroll(integer) : "Beam 2 Scroll Rate (0-255)" : 32
-	
+]
+
+@BaseClass = ShootAdvanced
+[
+	windup_time(string) : "Wind Up Time" : "0"
+	windup_min_time(string) : "Min Responsive Wind Up Time" : "0"
+	wind_down_time(string) : "Wind Down Time" : "0"
+	windup_action(choices) : "Wind Up Action" : 0 =
+	[	
+		0 : "Shoot On Release"
+		1 : "Shoot Once"
+		2 : "Shoot Constant"
+	]
+	windup_cost(string) : "Wind Up Ammo Cost" : "0"
+	windup_mult(string) : "Wind Up Damage Multiplier" : "3"
+	windup_easing(choices) : "Wind Up Easing" : 0 =
+	[	
+		0 : "None"
+		1 : "Ease In"
+		2 : "Ease Out"
+		3 : "Ease In + Ease Out"
+		4 : "Ease In (Heavy)"
+		5 : "Ease Out (Heavy)"
+		6 : "Ease In + Ease Out (Heavy)"
+	]
+	windup_snd(string) : "Wind Up Sound" : ""
+	windup_pitch_start(string) : "Wind Up Pitch Start (0-255)" : "90"
+	windup_pitch_end(string) : "Wind Up Pitch End (0-255)" : "130"
+	windup_anim(string) : "Wind Up Animation" : "0"
+	wind_down_anim(string) : "Wind Down Animation" : "0"
+]
+
+@BaseClass = ShootEffects
+[
 	explosion_style(choices) : "Custom Explosion Style" : 0 =
 	[
 		0 : "Sprite"
@@ -402,7 +526,7 @@
 		8 : "Wood"
 		64 : "Rock"
 	]
-
+	
 	rico_angle(string) : "Ricochet Max Angle (Degrees)" : "0"
 	rico_snds(string) : "Ricochet Sounds" : ""
 	rico_decal(choices) : "Ricochet Decal" : 24 =
@@ -458,31 +582,32 @@
 	rico_trace_count(integer) : "Ricochet Tracers" : 3
 	rico_trace_color(integer) : "Ricochet Tracer Color (0-255)" : 4
 	rico_trace_speed(integer) : "Ricochet Tracer Speed (0-6000)" : 1024
-	
-	windup_time(string) : "Wind Up Time" : "0"
-	windup_min_time(string) : "Min Responsive Wind Up Time" : "0"
-	wind_down_time(string) : "Wind Down Time" : "0"
-	windup_action(choices) : "Wind Up Action" : 0 =
-	[	
-		0 : "Shoot On Release"
-		1 : "Shoot Once"
-		2 : "Shoot Constant"
-	]
-	windup_cost(string) : "Wind Up Ammo Cost" : "0"
-	windup_mult(string) : "Wind Up Damage Multiplier" : "3"
-	windup_easing(choices) : "Wind Up Easing" : 0 =
-	[	
-		0 : "None"
-		1 : "Ease In"
-		2 : "Ease Out"
-		3 : "Ease In + Ease Out"
-		4 : "Ease In (Heavy)"
-		5 : "Ease Out (Heavy)"
-		6 : "Ease In + Ease Out (Heavy)"
-	]
-	windup_snd(string) : "Wind Up Sound" : ""
-	windup_pitch_start(string) : "Wind Up Pitch Start (0-255)" : "90"
-	windup_pitch_end(string) : "Wind Up Pitch End (0-255)" : "130"
-	windup_anim(string) : "Wind Up Animation" : "0"
-	wind_down_anim(string) : "Wind Down Animation" : "0"
+]
+
+
+@PointClass size(-32 -8 -8, 32 8 8 ) color(255 216 0) base(ShootGeneral, ShootBullet, ShootMeleePartial, ShootProjectile, ShootBeam, ShootEffects, ShootAdvanced) = weapon_custom_shoot : "Custom weapon shoot event"[]
+
+@PointClass size(-32 -8 -8, 32 8 8 ) color(255 216 0) base(ShootGeneral, ShootAdvanced, ShootBullet) = weapon_custom_bullet : "Custom weapon Bullet event"
+[
+	custom_effect(string) : "Bullet Impact Effect" : ""
+]
+
+@PointClass size(-32 -8 -8, 32 8 8 ) color(255 64 64) base(ShootGeneral, ShootAdvanced, ShootMelee) = weapon_custom_melee : "Custom weapon Bullet event"
+[
+	custom_effect(string) : "Melee Impact Effect" : ""
+]
+
+@PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootAdvanced, ShootProjectile) = weapon_custom_projectile : "Custom weapon Bullet event"
+[
+	custom_effect(string) : "Impact Effect" : ""
+]
+
+@PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootAdvanced, ShootBeam) = weapon_custom_beam : "Custom weapon Bullet event"
+[
+	custom_effect(string) : "Impact Effect" : ""
+]
+
+@PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 0) base(ShootEffects) = weapon_custom_effect : "Custom weapon impact effects"
+[
+
 ]
