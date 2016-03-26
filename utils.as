@@ -530,12 +530,6 @@ class WeaponCustomProjectile : ScriptBaseEntity
 			g_EntityFuncs.Remove(spriteAttachment);
 	}
 	
-	void KnockTarget(CBaseEntity@ ent)
-	{
-		if (ent.IsMonster())
-			ent.pev.velocity = ent.pev.velocity + pev.velocity.Normalize() * shoot_opts.knockback;
-	}
-	
 	void DamageTarget(CBaseEntity@ ent)
 	{	
 		if (ent is null or ent.entindex() == 0)
@@ -619,7 +613,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		}
 		
 		DamageTarget(pOther);
-		KnockTarget(pOther);
+		knockBack(pOther, pev.velocity.Normalize() * shoot_opts.knockback);
 		
 		switch(event)
 		{
@@ -778,6 +772,78 @@ void removeWeapon(CBasePlayerWeapon@ wep)
 	wep.Killed(wep.pev, 0);
 }
 
+class WeaponSound
+{
+	string file;
+	weapon_custom_sound@ options;
+
+	bool play(CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC, float volMult=1.0f)
+	{
+		if (file.Length() == 0)
+			return false;
+		float volume = 1.0f;
+		float attn = ATTN_NORM;
+		int flags = 0;
+		int pitch = getPitch();
+		if (options !is null)
+		{
+			volume = options.pev.health / 100.0f;
+			
+			switch(options.pev.body)
+			{
+				case 1: attn = ATTN_IDLE; break;
+				case 2: attn = ATTN_STATIC; break;
+				case 3: attn = ATTN_NORM; break;
+				case 4: attn = ATTN_NONE; break;
+			}
+			
+			if (options.pev.skin == 2)
+				flags |= SND_FORCE_SINGLE;
+			if (options.pev.skin == 3)
+				flags |= SND_FORCE_LOOP;
+		}
+		g_SoundSystem.EmitSoundDyn( ent.edict(), channel, file, volume*volMult, attn, flags, pitch );
+		return true;
+	}
+	
+	int getPitch()
+	{
+		if (options !is null)
+		{
+			int pitch_rand = options.pev.renderfx;
+			return options.pev.rendermode + Math.RandomLong(-pitch_rand, pitch_rand);
+		}
+		return 100;
+	}
+	
+	float getVolume()
+	{
+		if (options !is null)
+		{
+			return options.pev.health / 100.0f;
+		}
+		return 1.0f;
+	}
+	
+	void stop(CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC)
+	{
+		g_SoundSystem.StopSound(ent.edict(), channel, file);
+	}
+}
+
+array<WeaponSound> parseSounds(string val)
+{
+	array<string> strings = val.Split(";");
+	array<WeaponSound> sounds;
+	for (uint i = 0; i < strings.length(); i++)
+	{
+		WeaponSound s;
+		s.file = strings[i];
+		sounds.insertLast(s);
+	}
+	return sounds;
+}
+
 enum impact_decal_type
 {
 	DECAL_NONE = -2,
@@ -874,6 +940,95 @@ bool isBreakableEntity(CBaseEntity@ ent)
 	return false;
 }
 
+bool isHuman(CBaseEntity@ ent)
+{
+	if (ent.IsMonster()) {
+		CBaseMonster@ mon = cast<CBaseMonster@>(ent);
+		int c = mon.Classify();
+		switch(c)
+		{
+			case CLASS_PLAYER:
+			case CLASS_HUMAN_PASSIVE:
+			case CLASS_HUMAN_MILITARY:
+				return true;
+		}
+	}
+	return false;
+}
+
+bool isAlien(CBaseEntity@ ent)
+{
+	if (ent.IsMonster()) {
+		CBaseMonster@ mon = cast<CBaseMonster@>(ent);
+		int c = mon.Classify();
+		switch(c)
+		{
+			case CLASS_ALIEN_MILITARY:
+			case CLASS_ALIEN_PASSIVE:
+			case CLASS_ALIEN_MONSTER:
+			case CLASS_ALIEN_PREY:
+			case CLASS_ALIEN_PREDATOR:
+			case CLASS_PLAYER_BIOWEAPON:
+			case CLASS_ALIEN_BIOWEAPON:
+			case CLASS_XRACE_PITDRONE:
+			case CLASS_XRACE_SHOCK:
+			case CLASS_BARNACLE:
+				return true;
+		}
+	}
+	return false;
+}
+
+bool isRepairable(CBaseEntity@ breakable)
+{
+	if (breakable.pev.classname == "func_door")
+		return true; // no way to check breakable key that I know of
+	if (breakable.pev.classname == "func_breakable")
+		return breakable.pev.spawnflags & 8 != 0;
+	return false;
+}
+
+bool shouldHealTarget(CBaseEntity@ target, CBaseEntity@ plr, weapon_custom_shoot@ shoot_opts)
+{
+	if (shoot_opts.heal_mode == HEAL_OFF)
+		return false;
+	
+	int mode = shoot_opts.heal_mode;
+	
+	int heals = shoot_opts.heal_targets;
+	bool healAll = heals == HEALT_EVERYTHING;
+	bool healMachines = heals == HEALT_MACHINES or heals == HEALT_MACHINES_AND_BREAKABLES;
+	bool healHumans = heals == HEALT_HUMANS or heals == HEALT_HUMANS_AND_ALIENS;
+	bool healAliens = heals == HEALT_ALIENS or heals == HEALT_HUMANS_AND_ALIENS;
+	bool healBreakables = heals == HEALT_BREAKABLES or heals == HEALT_MACHINES_AND_BREAKABLES;
+		
+	// breakables ignore friendly status for whatever reason
+	if (target.IsBSPModel() and isRepairable(target) and (healBreakables or healAll))
+		return true;
+		
+	int rel = plr.IRelationship(target);
+	bool isFriendly = rel == R_AL or rel == R_NO;
+	bool healFriend = mode == HEAL_FRIENDS or mode == HEAL_ALL;
+	bool healFoe = mode == HEAL_FOES or mode == HEAL_ALL;
+		
+	if ((isFriendly and healFriend) or (!isFriendly and healFoe))
+	{
+		if (healAll) return true;
+		if (target.IsMachine() and healMachines) return true;
+		if (isHuman(target) and healHumans) return true;
+		if (isAlien(target) and healAliens) return true;
+	}
+	return false;
+}
+
+bool shouldAttack(CBaseEntity@ target, CBaseEntity@ plr, weapon_custom_shoot@ shoot_opts)
+{
+	bool shoot_on_damage = shoot_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0;
+	if (!shouldHealTarget(target, plr, shoot_opts) and !shoot_on_damage)
+		return false;
+	return true;
+}
+
 float applyDamageModifiers(float damage, CBaseEntity@ target, CBaseEntity@ plr, weapon_custom_shoot@ shoot_opts)
 {
 	// don't do any damage if target is friendly and npc_kill is set to 0 or 2
@@ -885,25 +1040,30 @@ float applyDamageModifiers(float damage, CBaseEntity@ target, CBaseEntity@ plr, 
 		}
 	}
 	
-	int rel = plr.IRelationship(target);
-	bool isFriendly = rel == R_AL or rel == R_NO;
-	bool isMachine = target.IsMachine() or target.IsBSPModel();
 	bool didHeal = false;
-	if (isFriendly)
+	if (shouldHealTarget(target, plr, shoot_opts))
 	{
-		bool repair = isMachine and shoot_opts.pev.spawnflags & FL_SHOOT_REPAIR != 0;
-		bool heal = !isMachine and shoot_opts.pev.spawnflags & FL_SHOOT_HEAL != 0;
-		if (heal or repair)
-		{
-			damage = -damage;
-			didHeal = true;
-		}
+		didHeal = true;
+		damage = -damage;
 	}
 	
 	// Award player with poitns (TODO: Account for hitgroup multipliers)
 	plr.pev.frags += target.GetPointsForDamage(didHeal ? -damage : damage);
 	
 	return damage;
+}
+
+void knockBack(CBaseEntity@ target, Vector vel)
+{
+	if (target.IsMonster() and !target.IsMachine())
+		target.pev.velocity = target.pev.velocity + vel;
+}
+
+void heal(CBaseEntity@ target, weapon_custom_shoot@ opts, float amt)
+{
+	target.pev.health += amt;
+	if (target.pev.health > target.pev.max_health)
+		target.pev.health = target.pev.max_health;
 }
 
 // breakable glass uses a special decal when shot
@@ -914,8 +1074,8 @@ string getBulletDecalOverride(CBaseEntity@ ent, string currentDecal)
 	{
 		if (ent.pev.playerclass == 1) // learned this from HLSDK func_break.cpp line 158
 			return getDecal(DECAL_GLASSBREAK);
-		if (ent.TakeDamage(ent.pev, ent.pev, 0, DMG_GENERIC) == 0) // only unbreakable glass can't take damage
-			return getDecal(DECAL_BULLETPROOF);
+		if (ent.TakeDamage(ent.pev, ent.pev, 0, DMG_GENERIC) == 0) // TODO: Don't do this, it makes sound
+			return getDecal(DECAL_BULLETPROOF); // only unbreakable glass can't take damage
 	}
 	
 	return currentDecal;

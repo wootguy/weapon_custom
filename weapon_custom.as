@@ -23,8 +23,12 @@ void WeaponCustomMapInit()
 {	
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom", "weapon_custom" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_shoot", "weapon_custom_shoot" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_bullet", "weapon_custom_bullet" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_melee", "weapon_custom_melee" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_projectile", "weapon_custom_projectile" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_beam", "weapon_custom_beam" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_sound", "weapon_custom_sound" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomProjectile", "weapon_custom_projectile" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomProjectile", "custom_projectile" );
 }
 
 void WeaponCustomMapActive()
@@ -94,8 +98,8 @@ bool debug_mode = false;
 int FL_FIRE_UNDERWATER = 1;
 
 // shoot spawn flags
-int FL_SHOOT_HEAL = 1;
-int FL_SHOOT_REPAIR = 2;
+int FL_SHOOT_IF_NOT_DAMAGE = 1;
+int FL_SHOOT_IF_NOT_MISS = 2;
 int FL_SHOOT_NO_MELEE_SOUND_OVERLAP = 4;
 int FL_SHOOT_RESPONSIVE_WINDUP = 8;
 int FL_SHOOT_RICO_SPARKS = 16;
@@ -110,6 +114,7 @@ int FL_SHOOT_DETONATE_SATCHELS = 1024;
 enum shoot_types
 {
 	SHOOT_BULLETS,
+	SHOOT_MELEE,
 	SHOOT_PROJECTILE,
 	SHOOT_BEAM
 }
@@ -216,6 +221,26 @@ enum player_anim_refs
 	ANIM_REF_SNIPER, // also includes scope animations
 	ANIM_REF_SAW,
 }
+
+enum heal_modes
+{
+	HEAL_OFF,
+	HEAL_FRIENDS,
+	HEAL_FOES,
+	HEAL_ALL,
+}
+
+enum heal_targets
+{
+	HEALT_HUMANS,
+	HEALT_ALIENS,
+	HEALT_MACHINES,
+	HEALT_BREAKABLES,
+	HEALT_MACHINES_AND_BREAKABLES,
+	HEALT_HUMANS_AND_ALIENS,
+	HEALT_EVERYTHING,
+}
+
 array<string> g_panim_refs = {
 	"crowbar", "gren", "trip", "onehanded", "python", "shotgun", "gauss", "mp5", 
 	"rpg", "egon", "squeak", "hive", "bow", "minigun", "uzis", "m16", "sniper", "saw" 
@@ -258,77 +283,47 @@ class ProjectileOptions
 	Color trail_color;
 };
 
-class WeaponSound
+class CommonShootOptions
 {
-	string file;
-	weapon_custom_sound@ options;
 
-	bool play(CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC, float volMult=1.0f)
-	{
-		if (file.Length() == 0)
-			return false;
-		float volume = 1.0f;
-		float attn = ATTN_NORM;
-		int flags = 0;
-		int pitch = getPitch();
-		if (options !is null)
-		{
-			volume = options.pev.health / 100.0f;
-			
-			switch(options.pev.body)
-			{
-				case 1: attn = ATTN_IDLE; break;
-				case 2: attn = ATTN_STATIC; break;
-				case 3: attn = ATTN_NORM; break;
-				case 4: attn = ATTN_NONE; break;
-			}
-			
-			if (options.pev.skin == 2)
-				flags |= SND_FORCE_SINGLE;
-			if (options.pev.skin == 3)
-				flags |= SND_FORCE_LOOP;
-		}
-		g_SoundSystem.EmitSoundDyn( ent.edict(), channel, file, volume*volMult, attn, flags, pitch );
-		return true;
-	}
-	
-	int getPitch()
-	{
-		if (options !is null)
-		{
-			int pitch_rand = options.pev.renderfx;
-			return options.pev.rendermode + Math.RandomLong(-pitch_rand, pitch_rand);
-		}
-		return 100;
-	}
-	
-	float getVolume()
-	{
-		if (options !is null)
-		{
-			return options.pev.health / 100.0f;
-		}
-		return 1.0f;
-	}
-	
-	void stop(CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC)
-	{
-		g_SoundSystem.StopSound(ent.edict(), channel, file);
-	}
 }
 
-array<WeaponSound> parseSounds(string val)
+class weapon_custom_bullet : weapon_custom_shoot 
 {
-	array<string> strings = val.Split(";");
-	array<WeaponSound> sounds;
-	for (uint i = 0; i < strings.length(); i++)
+	void Spawn()
 	{
-		WeaponSound s;
-		s.file = strings[i];
-		sounds.insertLast(s);
+		weapon_custom_shoot::Spawn();
+		shoot_type = SHOOT_BULLETS;
 	}
-	return sounds;
-}
+};
+
+class weapon_custom_melee : weapon_custom_shoot 
+{
+	void Spawn()
+	{
+		weapon_custom_shoot::Spawn();
+		shoot_type = SHOOT_MELEE;
+		bullet_impact = BULLET_IMPACT_MELEE;
+	}
+};
+
+class weapon_custom_projectile : weapon_custom_shoot 
+{
+	void Spawn()
+	{
+		weapon_custom_shoot::Spawn();
+		shoot_type = SHOOT_PROJECTILE;
+	}
+};
+
+class weapon_custom_beam : weapon_custom_shoot 
+{
+	void Spawn()
+	{
+		weapon_custom_shoot::Spawn();
+		shoot_type = SHOOT_BEAM;
+	}
+};
 
 class weapon_custom_shoot : ScriptBaseEntity
 {
@@ -344,9 +339,12 @@ class weapon_custom_shoot : ScriptBaseEntity
 	float kickback;
 	float knockback;
 	float max_range;
+	int heal_mode;
+	int heal_targets;
+	
 	int bullets;
 	int bullet_type; // see docs for "Bullet"
-	int bullet_color;
+	int bullet_color = -1;
 	int bullet_spread_func;
 	int bullet_impact;
 	int bullet_decal;
@@ -407,12 +405,14 @@ class weapon_custom_shoot : ScriptBaseEntity
 		if 		(szKey == "sounds")        sounds = parseSounds(szValue);					
 		else if (szKey == "shoot_anims")   shoot_anims = szValue.Split(";");					
 		else if (szKey == "ammo_cost")     ammo_cost = atoi(szValue);			
-		else if (szKey == "shoot_type")    shoot_type = atoi(szValue);			
+		//else if (szKey == "shoot_type")    shoot_type = atoi(szValue);			
 		else if (szKey == "cooldown")      cooldown = atof(szValue);
 		else if (szKey == "recoil")        recoil = atof(szValue);
 		else if (szKey == "kickback")      kickback = atof(szValue);
 		else if (szKey == "knockback")     knockback = atof(szValue);
 		else if (szKey == "max_range")     max_range = atof(szValue);
+		else if (szKey == "heal_mode")     heal_mode = atoi(szValue);
+		else if (szKey == "heal_targets")  heal_targets = atoi(szValue);
 		
 		else if (szKey == "bullets")       bullets = atoi(szValue);
 		else if (szKey == "bullet_type")   bullet_type = atoi(szValue);
@@ -575,7 +575,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	}
 	
 	void Spawn()
-	{				
+	{
 		if (string(pev.targetname).Length() == 0) {
 			println(logPrefix + "weapon_custom_shoot has no targetname and will not be used.");
 			return;
@@ -603,7 +603,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 					") is greater than the max recommended (" + REC_BEAMS + ")\n"
 					"Your game might freeze occasionally with 'Overflow beam entity list!' spammed in console\n");
 		
-		custom_weapon_shoots[pev.targetname] = this;
+		custom_weapon_shoots[pev.targetname] = @this;
 		Precache();
 	}
 	
@@ -649,7 +649,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 			PrecacheModel( "models/grenade.mdl" );
 		if (projectile.type == PROJECTILE_MORTAR)
 		{
-			PrecacheModel( "models/shell.mdl" );
+			PrecacheModel( "models/mortarshell.mdl" );
 			PrecacheSound( "weapons/ofmortar.wav" );
 		}
 		if (projectile.type == PROJECTILE_HVR)

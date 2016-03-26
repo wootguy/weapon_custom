@@ -29,7 +29,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	bool beam_active = false;
 	bool canShootAgain = true;
+	
 	bool meleeHit = false;
+	bool healedTarget = true;
+	bool abortAttack = false;
 	
 	bool burstFiring = false;
 	float nextBurstFire = 0;
@@ -70,28 +73,16 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void Precache()
 	{
 		self.PrecacheCustomModels();
-
-		g_Game.PrecacheModel( "models/mortarshell.mdl" );
 		
 		m_iShell = g_Game.PrecacheModel( "models/shell.mdl" );
-		g_Game.PrecacheModel( "models/grenade.mdl" );
 
 		g_Game.PrecacheModel( "models/w_9mmARclip.mdl" );
 		g_SoundSystem.PrecacheSound( "items/9mmclip1.wav" );              
 
-		//These are played by the model, needs changing there
+		//These are played by the model, needs changing there (TODO: Are they really used?)
 		g_SoundSystem.PrecacheSound( "hl/items/clipinsert1.wav" );
 		g_SoundSystem.PrecacheSound( "hl/items/cliprelease1.wav" );
 		g_SoundSystem.PrecacheSound( "hl/items/guncock1.wav" );
-
-		g_SoundSystem.PrecacheSound( "hl/weapons/hks1.wav" );
-		g_SoundSystem.PrecacheSound( "hl/weapons/hks2.wav" );
-		g_SoundSystem.PrecacheSound( "hl/weapons/hks3.wav" );
-
-		g_SoundSystem.PrecacheSound( "hl/weapons/glauncher.wav" );
-		g_SoundSystem.PrecacheSound( "hl/weapons/glauncher2.wav" );
-
-		g_SoundSystem.PrecacheSound( "hl/weapons/357_cock1.wav" );
 	}
 
 	bool GetItemInfo( ItemInfo& out info )
@@ -186,7 +177,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, self.m_pPlayer.edict(), tr );
 		//te_beampoints(vecSrc, vecEnd);
 		
-		if ( tr.flFraction >= 1.0 and active_opts.bullet_impact == BULLET_IMPACT_MELEE)
+		if ( tr.flFraction >= 1.0 and active_opts.shoot_type == SHOOT_MELEE)
 		{
 			// This does a trace in the form of a box so there is a much higher chance of hitting something
 			// From crowbar.cpp in the hlsdk:
@@ -213,6 +204,31 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				
 				if( pHit !is null ) 
 				{
+					int dmgType = DMG_BULLET | DMG_NEVERGIB;
+					if (active_opts.shoot_type == SHOOT_MELEE)
+						dmgType = DMG_CLUB;
+					
+					// damage done before hitgroup multipliers
+					float baseDamage = active_opts.bullet_damage*windupMultiplier;
+					baseDamage = applyDamageModifiers(baseDamage, pHit, self.m_pPlayer, active_opts);
+					
+					if (baseDamage < 0)
+					{	
+						// avoid TraceAttack so scis don't think we're shooting at them
+						heal(pHit, active_opts, -baseDamage);
+					}
+					else
+					{
+						if (active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0)
+						{
+							abortAttack = true;
+							return;
+						}
+						g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
+						pHit.TraceAttack(self.m_pPlayer.pev, baseDamage, vecAiming, tr, dmgType);
+						g_WeaponFuncs.ApplyMultiDamage(pHit.pev, self.m_pPlayer.pev);
+					}
+					
 					string decal = getBulletDecalOverride(pHit, getDecal(active_opts.bullet_decal));
 					if (pHit.IsBSPModel()) {
 						if (active_opts.bullet_impact == BULLET_IMPACT_STANDARD)
@@ -220,22 +236,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 						if (active_opts.bullet_impact == BULLET_IMPACT_MELEE)
 							te_decal(tr.vecEndPos, pHit, decal);
 					}
-
-					int dmgType = DMG_BULLET | DMG_NEVERGIB;
-					if (active_opts.bullet_impact != BULLET_IMPACT_STANDARD)
-						dmgType = DMG_CLUB;
 					
-					// damage done before hitgroup multipliers
-					float baseDamage = active_opts.bullet_damage*windupMultiplier;
-					baseDamage = applyDamageModifiers(baseDamage, pHit, self.m_pPlayer, active_opts);
-					if (baseDamage < 0)
-						dmgType = DMG_MEDKITHEAL;
+					knockBack(pHit, vecAiming * active_opts.knockback);
 					
-					g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
-					pHit.TraceAttack(self.m_pPlayer.pev, baseDamage, vecAiming, tr, dmgType);
-					g_WeaponFuncs.ApplyMultiDamage(pHit.pev, self.m_pPlayer.pev);
-					
-					bool playDefaultMeleeSnd = active_opts.bullet_impact == BULLET_IMPACT_MELEE;
+					bool playDefaultMeleeSnd = active_opts.shoot_type == SHOOT_MELEE;
 					bool playDefaultMeleeSndQuietly = isBreakableEntity(pHit); // only SC does this
 					if (pHit.IsMonster() or pHit.IsPlayer())
 					{
@@ -249,8 +253,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 						}
 						else
 							playDefaultMeleeSndQuietly = true;
-						
-						pHit.pev.velocity = pHit.pev.velocity + vecAiming * active_opts.knockback;
 					} 
 				
 					if (playDefaultMeleeSnd)
@@ -265,7 +267,13 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		}
 		else // Bullet didn't hit anything
 		{
-			bool meleeSkip = active_opts.bullet_impact == BULLET_IMPACT_MELEE;
+			if (active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_MISS != 0)
+			{
+				abortAttack = true;
+				return;
+			}
+						
+			bool meleeSkip = active_opts.shoot_type == SHOOT_MELEE;
 			meleeSkip = meleeSkip and (active_opts.pev.spawnflags & FL_SHOOT_NO_MELEE_SOUND_OVERLAP != 0);
 			// melee weapons are special and only play shoot sounds when they miss
 			if (meleeSkip)
@@ -417,9 +425,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		else if (options.type == PROJECTILE_RPG)
 			@shootEnt = g_EntityFuncs.CreateRPGRocket(projectile_ori, self.m_pPlayer.pev.v_angle, self.m_pPlayer.edict());
 		else if (options.type == PROJECTILE_WEAPON)
-			ShootCustomProjectile("weapon_custom_projectile");
+			ShootCustomProjectile("custom_projectile");
 		else if (options.type == PROJECTILE_CUSTOM)
-			ShootCustomProjectile("weapon_custom_projectile");
+			ShootCustomProjectile("custom_projectile");
 		else if (options.type == PROJECTILE_OTHER)
 			ShootCustomProjectile(options.entity_class);
 		else
@@ -990,20 +998,17 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		}
 		
 		// recoil
-		//self.m_pPlayer.pev.punchangle.x = Math.RandomLong(-180, 180);
-		//self.m_pPlayer.pev.punchangle.y = Math.RandomLong(-180, 180);
-		//self.m_pPlayer.pev.punchangle.z = Math.RandomLong(-180, 180);
+		self.m_pPlayer.pev.punchangle.x = 0;//Math.RandomLong(-180, 180);
+		self.m_pPlayer.pev.punchangle.y = 0;//Math.RandomLong(-180, 180);
+		self.m_pPlayer.pev.punchangle.z = 0;//Math.RandomLong(-180, 180);
 		//self.m_pPlayer.pev.punchangle.y = 0;
-		
-		// muzzle flash (doesn't seem to do anything?)
-		self.m_pPlayer.m_iWeaponFlash = BRIGHT_GUN_FLASH;
 		
 		// idle random time after shooting
 		self.m_flTimeWeaponIdle = WeaponTimeBase() + g_PlayerFuncs.SharedRandomFloat( self.m_pPlayer.random_seed,  10, 15 );
 		
 		// random shoot sound
-		self.m_pPlayer.m_iWeaponVolume = NORMAL_GUN_VOLUME;
-		bool meleeSkip = active_opts.shoot_type == SHOOT_BULLETS and active_opts.bullet_impact == BULLET_IMPACT_MELEE;
+		
+		bool meleeSkip = active_opts.shoot_type == SHOOT_MELEE;
 		meleeSkip = meleeSkip and (active_opts.pev.spawnflags & FL_SHOOT_NO_MELEE_SOUND_OVERLAP != 0);
 		if (!meleeSkip)
 		{
@@ -1012,9 +1017,17 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				snd.play(self.m_pPlayer, CHAN_WEAPON);
 		}
 		
-		// monster reaction to sounds
-		self.m_pPlayer.m_iExtraSoundTypes = bits_SOUND_DANGER;
-		self.m_pPlayer.m_flStopExtraSoundTime = WeaponTimeBase() + 0.2;
+		// monster reactions to shooting or danger
+		int hmode = active_opts.heal_mode;
+		bool harmlessWep = hmode == HEAL_ALL or active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0;
+		if (!healedTarget and !harmlessWep)
+		{
+			// get a little spooked
+			self.m_pPlayer.m_iWeaponFlash = BRIGHT_GUN_FLASH;
+			self.m_pPlayer.m_iWeaponVolume = NORMAL_GUN_VOLUME;
+			self.m_pPlayer.m_iExtraSoundTypes = bits_SOUND_COMBAT;//bits_SOUND_DANGER;
+			self.m_pPlayer.m_flStopExtraSoundTime = WeaponTimeBase() + 0.2;
+		}
 			
 		DepleteAmmo(active_opts.ammo_cost);
 			
@@ -1027,7 +1040,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		else
 		{
 			float cooldownVal = active_opts.cooldown;
-			if (active_opts.shoot_type == SHOOT_BULLETS and active_opts.bullet_impact == BULLET_IMPACT_MELEE and !meleeHit)
+			if (active_opts.shoot_type == SHOOT_MELEE and !meleeHit)
 				cooldownVal = active_opts.melee_miss_cooldown;
 			self.m_flNextPrimaryAttack = WeaponTimeBase() + cooldownVal;
 			self.m_flNextSecondaryAttack = WeaponTimeBase() + cooldownVal;
@@ -1044,16 +1057,21 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void DoAttack(bool windupAttack=false)
 	{		
+		healedTarget = false;
+		abortAttack = false;
+		
 		// shoot stuff
 		switch(active_opts.shoot_type)
 		{
+			case SHOOT_MELEE:
 			case SHOOT_BULLETS: ShootBullets(); break;
 			case SHOOT_PROJECTILE: ShootProjectile(); break;
 			case SHOOT_BEAM: ShootBeam(); break;
 		}
 		DetonateSatchels();
 		
-		AttackEffects(windupAttack);
+		if (!abortAttack)
+			AttackEffects(windupAttack);
 	}
 	
 	void DepleteAmmo(int amt)
