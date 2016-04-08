@@ -1,14 +1,3 @@
-enum Mp5Animation
-{
-	MP5_LONGIDLE = 0,
-	MP5_IDLE1,
-	MP5_LAUNCH,
-	MP5_RELOAD,
-	MP5_DEPLOY,
-	MP5_FIRE1,
-	MP5_FIRE2,
-	MP5_FIRE3,
-};
 
 class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 {
@@ -33,6 +22,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	bool meleeHit = false;
 	bool healedTarget = true;
 	bool abortAttack = false;
+	float partialAmmoModifier = 1.0f; // scale damage by how much ammo was used
+	int partialAmmoUsage; // reduce ammo usage if damage amount was less than expected (e.g. heal past max health)
 	
 	bool burstFiring = false;
 	float nextBurstFire = 0;
@@ -49,23 +40,45 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	float windupMultiplier = 1.0f;
 	int windupAmmoUsed = 0;
 	
+	float lastPrimaryRegen = 0;
+	float lastSecondaryRegen = 0;
+	
+	float nextShootTime = 0;
+	float nextActionTime = 0;
+	float unhideLaserTime = 0;
+	float ejectShellTime = 0;
+	float nextReload = 0;
+	float nextReloadEnd = 0;
+	bool needShellEject = false;
+	int reloading = 0; // continous reload state
+	
 	int active_fire = -1;
 	int active_ammo_type = -1;
 	weapon_custom_shoot@ active_opts; // active shoot opts
 	
+	EHandle hook_ent;
+	CBeam@ hook_beam;
+	bool shootingHook = false;
+	bool hookAnimStarted = false;
+	float hookAnimStartTime = 0;
+	
+	bool primaryAlt = false;
+	
+	EHandle laser_spr;
+	
+	int shootCount = 0;
 	
 	void Spawn()
 	{
 		if (settings is null) {
-			@settings = cast<weapon_custom>( custom_weapons[self.pev.classname] );
-		}
+			@settings = cast<weapon_custom>( @custom_weapons[self.pev.classname] );
+		}		
 		
 		Precache();
 		g_EntityFuncs.SetModel( self, settings.wpn_w_model );
 
 		self.m_iDefaultAmmo = settings.clip_size();
-
-		self.m_iSecondaryAmmoType = 0;
+		
 		self.FallInit();
 		SetThink( ThinkFunction( WeaponThink ) );
 	}
@@ -73,24 +86,30 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void Precache()
 	{
 		self.PrecacheCustomModels();
-		
-		m_iShell = g_Game.PrecacheModel( "models/shell.mdl" );
-
-		g_Game.PrecacheModel( "models/w_9mmARclip.mdl" );
-		g_SoundSystem.PrecacheSound( "items/9mmclip1.wav" );              
-
-		//These are played by the model, needs changing there (TODO: Are they really used?)
-		g_SoundSystem.PrecacheSound( "hl/items/clipinsert1.wav" );
-		g_SoundSystem.PrecacheSound( "hl/items/cliprelease1.wav" );
-		g_SoundSystem.PrecacheSound( "hl/items/guncock1.wav" );
 	}
 
+	void RegenAmmo(int ammoType)
+	{
+		if (self.m_pPlayer is null)
+			return;
+		int ammoLeft = self.m_pPlayer.m_rgAmmo(ammoType);
+		int maxAmmo = self.m_pPlayer.GetMaxAmmo(ammoType);
+		ammoLeft += settings.primary_regen_amt;
+		
+		if (ammoLeft < 0) 
+			ammoLeft = 0;
+		if (ammoLeft > maxAmmo) 
+			ammoLeft = maxAmmo;
+			
+		self.m_pPlayer.m_rgAmmo(ammoType, ammoLeft);
+	}
+	
 	bool GetItemInfo( ItemInfo& out info )
 	{
-		
 		if (settings is null) {
-			@settings = cast<weapon_custom>( custom_weapons[self.pev.classname] );
+			@settings = cast<weapon_custom>( @custom_weapons[self.pev.classname] );
 		}
+		
 		info.iMaxAmmo1 	= 1; // doesn't even matter??
 		info.iMaxAmmo2 	= 1; // ^
 		info.iMaxClip 	= settings.clip_size();
@@ -103,6 +122,22 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		info.iFlags 	= settings.pev.spawnflags & 0x1F;
 		info.iWeight 	= settings.priority;
 
+		// ammo regeneration
+		if (settings.primary_regen_amt != 0 and lastPrimaryRegen < g_Engine.time)
+		{
+			lastPrimaryRegen = g_Engine.time + settings.primary_regen_time;
+			RegenAmmo(self.m_iPrimaryAmmoType);
+			
+		}
+		if (settings.secondary_regen_amt != 0 and lastSecondaryRegen < g_Engine.time)
+		{
+			lastSecondaryRegen = g_Engine.time + settings.secondary_regen_time;
+			RegenAmmo(self.m_iPrimaryAmmoType);
+		}
+		
+		if (settings.pev.spawnflags & FL_WEP_HIDE_SECONDARY_AMMO != 0 and settings.matchingAmmoTypes)
+			self.m_iSecondaryAmmoType = self.m_iPrimaryAmmoType;
+		
 		return true;
 	}
 
@@ -121,10 +156,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	bool PlayEmptySound()
 	{
-		if( self.m_bPlayEmptySound )
+		if( self.m_bPlayEmptySound or true )
 		{
 			self.m_bPlayEmptySound = false;
-			g_SoundSystem.EmitSoundDyn( self.m_pPlayer.edict(), CHAN_WEAPON, "hl/weapons/357_cock1.wav", 0.8, ATTN_NORM, 0, PITCH_NORM );
+			settings.primary_empty_snd.play(self.m_pPlayer, CHAN_WEAPON);
 		}
 		
 		return false;
@@ -132,8 +167,15 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 
 	bool Deploy()
 	{
-		return self.DefaultDeploy( self.GetV_Model( settings.wpn_v_model ), self.GetP_Model( settings.wpn_p_model ), 
+		if (settings.pev.spawnflags & FL_WEP_LASER_SIGHT != 0 and !primaryAlt)
+		{
+			ShowLaser();
+			unhideLaserTime = g_Engine.time + 0.5;
+		}
+		bool ret = self.DefaultDeploy( self.GetV_Model( settings.wpn_v_model ), self.GetP_Model( settings.wpn_p_model ), 
 								   settings.deploy_anim, settings.getPlayerAnimExt() );
+		self.m_flTimeWeaponIdle = WeaponTimeBase() + settings.deploy_time;					   
+		return ret;
 	}
 	
 	float WeaponTimeBase()
@@ -168,8 +210,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void ShootOneBullet()
 	{
 		Vector vecSrc	 = self.m_pPlayer.GetGunPosition();
-		Vector perfectAim = self.m_pPlayer.GetAutoaimVector(0);
-		Vector vecAiming = spreadDir(perfectAim, active_opts.bullet_spread, active_opts.bullet_spread_func);
+		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
+		Vector vecAiming = spreadDir(g_Engine.v_forward, active_opts.bullet_spread, active_opts.bullet_spread_func);
 		
 		// Do the bullet collision
 		TraceResult tr;
@@ -193,9 +235,67 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			}
 		}
 		
-		meleeHit = tr.flFraction < 1.0;
+		meleeHit = active_opts.shoot_type == SHOOT_MELEE and tr.flFraction < 1.0;
 		
-		// do all the fancy bullet effects
+		bool revivedSomething = false;
+		bool reviveOnly = active_opts.heal_mode >= HEAL_REVIVE_FRIENDS;
+		if (reviveOnly)
+		{
+			CBaseEntity@ revTarget = getReviveTarget(tr.vecEndPos, REVIVE_RADIUS, self.m_pPlayer, active_opts);
+			if (revTarget !is null)
+			{
+				float revPoints = revive(revTarget, active_opts);
+				revivedSomething = true;
+				
+				// revive attacks are special and always play melee hit sounds
+				if (active_opts.pev.spawnflags & FL_SHOOT_NO_MELEE_SOUND_OVERLAP == 0)
+				{
+					WeaponSound@ snd = active_opts.getRandomMeleeHitSound();
+					if (snd !is null)
+						snd.play(self.m_pPlayer, CHAN_STATIC);
+				}
+			}
+		}
+		
+		// bubble trails
+		bool startInWater = g_EngineFuncs.PointContents(vecSrc) == CONTENTS_WATER;
+		bool endInWater = g_EngineFuncs.PointContents(tr.vecEndPos) == CONTENTS_WATER;
+		if (startInWater or endInWater)
+		{
+			Vector bubbleStart = vecSrc;
+			Vector bubbleEnd = tr.vecEndPos;
+			Vector bubbleDir = bubbleEnd - bubbleStart;
+			float waterLevel;
+			
+			// find water level relative to trace start
+			Vector waterPos = startInWater ? bubbleStart : bubbleEnd;
+			waterLevel = g_Utility.WaterLevel(waterPos, waterPos.z, waterPos.z + 1024);
+			waterLevel -= bubbleStart.z;
+			
+			// get percentage of distance travelled through water
+			float waterDist = 1.0f; 
+			if (!startInWater or !endInWater)
+				waterDist -= waterLevel / (bubbleEnd.z - bubbleStart.z);
+			if (!endInWater)
+				waterDist = 1.0f - waterDist;
+			
+			// clip trace to just the water portion
+			if (!startInWater)
+				bubbleStart = bubbleEnd - bubbleDir*waterDist;
+			else if (!endInWater)
+				bubbleEnd = bubbleStart + bubbleDir*waterDist;
+				
+			if (!startInWater or !endInWater)
+				waterLevel = bubbleStart.z > bubbleEnd.z ? 0 : bubbleEnd.z - bubbleStart.z;
+				
+			// calculate bubbles needed for an even distribution
+			int numBubbles = int( (bubbleEnd - bubbleStart).Length() / 128.0f );
+			numBubbles = Math.max(1, Math.min(255, numBubbles));
+			
+			te_bubbletrail(bubbleStart, bubbleEnd, "sprites/bubble.spr", waterLevel, numBubbles, 16.0f);
+		}
+		
+		// do more fancy effects
 		if( tr.flFraction < 1.0 )
 		{
 			if( tr.pHit !is null )
@@ -209,19 +309,33 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 						dmgType = DMG_CLUB;
 					
 					// damage done before hitgroup multipliers
-					float baseDamage = active_opts.bullet_damage*windupMultiplier;
-					baseDamage = applyDamageModifiers(baseDamage, pHit, self.m_pPlayer, active_opts);
+					float attackDamage = active_opts.bullet_damage*windupMultiplier*partialAmmoModifier;
+					float baseDamage = applyDamageModifiers(attackDamage, pHit, self.m_pPlayer, active_opts);
 					
 					if (baseDamage < 0)
 					{	
 						// avoid TraceAttack so scis don't think we're shooting at them
-						heal(pHit, active_opts, -baseDamage);
+						float healPoints = -heal(pHit, active_opts, -baseDamage);
+						if (healPoints == 0 and active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0)
+						{
+							abortAttack = !revivedSomething;
+							return;
+						}
+						if (active_opts.pev.spawnflags & FL_SHOOT_PARTIAL_AMMO_SHOOT != 0)
+						{
+							// don't use all ammo if we were only able to heal a small amount
+							if (healPoints < attackDamage and attackDamage > 0)
+							{
+								float ammoScale = healPoints / attackDamage;
+								partialAmmoUsage = int(ammoScale * active_opts.ammo_cost);
+							}
+						}	
 					}
 					else
 					{
 						if (active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0)
 						{
-							abortAttack = true;
+							abortAttack = !revivedSomething;
 							return;
 						}
 						g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
@@ -269,14 +383,14 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			if (active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_MISS != 0)
 			{
-				abortAttack = true;
+				abortAttack = !revivedSomething;
 				return;
 			}
 						
 			bool meleeSkip = active_opts.shoot_type == SHOOT_MELEE;
 			meleeSkip = meleeSkip and (active_opts.pev.spawnflags & FL_SHOOT_NO_MELEE_SOUND_OVERLAP != 0);
 			// melee weapons are special and only play shoot sounds when they miss
-			if (meleeSkip)
+			if (meleeSkip and !shootingHook)
 			{
 				WeaponSound@ snd = active_opts.getRandomShootSound();
 				if (snd !is null)
@@ -342,10 +456,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			keys["model"] = model;
 		if (options.type == PROJECTILE_WEAPON)
 			keys["model"] = settings.wpn_w_model;
+		if (options.model.Length() == 0)
+			keys["rendermode"] = "1"; // don't render the model
 			
 		CBaseEntity@ shootEnt = g_EntityFuncs.CreateEntity(classname, keys, false);	
 		WeaponCustomProjectile@ shootEnt_c = cast<WeaponCustomProjectile@>(CastToScriptClass(shootEnt));
-		@shootEnt.pev.owner = self.m_pPlayer.edict(); // do this or else crash		
+		@shootEnt.pev.owner = self.m_pPlayer.edict(); // do this or else crash	
 		@shootEnt_c.shoot_opts = active_opts;
 		shootEnt_c.pickup_classname = settings.weapon_classname;
 		
@@ -392,7 +508,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		return shootEnt;
 	}
 	
-	void ShootProjectile()
+	CBaseEntity@ ShootProjectile()
 	{		
 		Math.MakeVectors( self.m_pPlayer.pev.v_angle + self.m_pPlayer.pev.punchangle );
 		
@@ -425,31 +541,29 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		else if (options.type == PROJECTILE_RPG)
 			@shootEnt = g_EntityFuncs.CreateRPGRocket(projectile_ori, self.m_pPlayer.pev.v_angle, self.m_pPlayer.edict());
 		else if (options.type == PROJECTILE_WEAPON)
-			ShootCustomProjectile("custom_projectile");
+			@shootEnt = ShootCustomProjectile("custom_projectile");
 		else if (options.type == PROJECTILE_CUSTOM)
-			ShootCustomProjectile("custom_projectile");
+			@shootEnt = ShootCustomProjectile("custom_projectile");
 		else if (options.type == PROJECTILE_OTHER)
-			ShootCustomProjectile(options.entity_class);
+			@shootEnt = ShootCustomProjectile(options.entity_class);
 		else
 			println("Unknown projectile type: " + options.type);
 			
 		if (nade !is null)
 			@shootEnt = cast<CBaseEntity@>(nade);
 			
-		if (shootEnt !is null and false)
+		if (shootEnt !is null)
 		{
 			if (active_opts.pev.spawnflags & FL_SHOOT_PROJ_NO_GRAV != 0) // disable gravity on projectile
 				shootEnt.pev.movetype = MOVETYPE_FLY;
-			else if (nade !is null or true)
-				shootEnt.pev.movetype = MOVETYPE_BOUNCE;
-			//else
-				//shootEnt.pev.movetype = MOVETYPE_TOSS;
 		}
 		
 		if (options.type == PROJECTILE_WEAPON)
 		{
 			g_Scheduler.SetTimeout( "removeWeapon", 0, @self );
 		}
+		
+		return shootEnt;
 	}
 	
 	void ShootBeam()
@@ -469,14 +583,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		minBeamTime = Math.max(active_opts.beams[0].time, active_opts.beams[1].time);
 		self.pev.nextthink = g_Engine.time;
 	}
-	
-	void DetonateSatchels()
-	{
-		if (active_opts.pev.spawnflags & FL_SHOOT_DETONATE_SATCHELS == 0)
-			return;
-		g_EntityFuncs.UseSatchelCharges(self.m_pPlayer.pev, SATCHEL_DETONATE);
-	}
-	
+		
 	// calculates beams, end sprite locations, and damage
 	bool UpdateBeam(int beamId)
 	{
@@ -516,8 +623,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					ricobeam.SetType(BEAM_ENTPOINT);
 					ricobeam.SetEndEntity(self.m_pPlayer);
 					ricobeam.SetEndAttachment(1);
-					if (beam_opts.type == BEAM_SPIRAL)
-						ricobeam.SetFlags( BEAM_FSINE );
+					int flags = 0;
+					if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+						flags |= BEAM_FSINE;
+					if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+						flags |= BEAM_FSOLID;
+					hook_beam.SetFlags( flags );
 					ricobeam.SetNoise(beam_opts.noise);
 					ricobeam.SetWidth(beam_opts.width);
 					ricobeam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
@@ -567,8 +678,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				if (ricobeam is null)
 				{
 					@ricobeam = @beams[beamId][i] = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
-					if (beam_opts.type == BEAM_SPIRAL)
-						ricobeam.SetFlags( BEAM_FSINE );
+					int flags = 0;
+					if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+						flags |= BEAM_FSINE;
+					if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+						flags |= BEAM_FSOLID;
+					hook_beam.SetFlags( flags );
 					ricobeam.SetNoise(beam_opts.noise);
 					ricobeam.SetWidth(beam_opts.width);
 					ricobeam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
@@ -582,7 +697,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					beams[beamId][i-1].SetStartPos(tr.vecEndPos);
 					
 					if (minBeamTime > 0 or doDamage)
-						custom_ricochet(tr.vecEndPos, n, active_opts, beams[beamId][i-1], ent);
+						custom_ricochet(tr.vecEndPos, n, active_opts.effect1, beams[beamId][i-1], ent);
 				}
 
 				numRicochets = i+1;
@@ -697,8 +812,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			if (ricobeam is null)
 			{
 				@ricobeam = @beams[beamId][i] = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
-				if (beam_opts.type == BEAM_SPIRAL)
-					ricobeam.SetFlags( BEAM_FSINE );
+				int flags = 0;
+				if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+					flags |= BEAM_FSINE;
+				if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+					flags |= BEAM_FSOLID;
+				hook_beam.SetFlags( flags );
 				if (i == 0)
 				{
 					ricobeam.SetType(BEAM_ENTPOINT);
@@ -727,6 +846,48 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				g_EntityFuncs.Remove( beams[beamId][i] );
 				@beams[beamId][i] = null;
 			}
+		}
+	}
+	
+	void DetonateSatchels()
+	{
+		if (active_opts.pev.spawnflags & FL_SHOOT_DETONATE_SATCHELS == 0)
+			return;
+		g_EntityFuncs.UseSatchelCharges(self.m_pPlayer.pev, SATCHEL_DETONATE);
+	}
+	
+	void ShootHook()
+	{
+		if (!shootingHook)
+		{
+			shootingHook = true;
+			windupHeld = true;
+			hookAnimStarted = false;
+			hookAnimStartTime = g_Engine.time + active_opts.hook_delay;
+			
+			hook_ent = ShootProjectile();
+			if (hook_beam is null)
+			{
+				BeamOptions@ beam_opts = active_opts.beams[0];
+				@hook_beam = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
+				hook_beam.SetType(BEAM_ENTS);
+				hook_beam.SetEndEntity(self.m_pPlayer);
+				hook_beam.SetEndAttachment(1);
+				hook_beam.SetStartEntity(hook_ent);
+				int flags = 0;
+				if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+					flags |= BEAM_FSINE;
+				if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+					flags |= BEAM_FSOLID;
+				hook_beam.SetFlags( flags );
+				hook_beam.SetNoise(beam_opts.noise);
+				hook_beam.SetWidth(beam_opts.width);
+				hook_beam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
+				hook_beam.SetBrightness(beam_opts.color.a);
+				hook_beam.SetScrollRate(beam_opts.scrollRate);
+			}
+			
+			self.pev.nextthink = g_Engine.time;
 		}
 	}
 	
@@ -803,7 +964,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				windupSoundActive = false;
 				windingDown = false;
 				windupFinished = false;
-				DoAttack(true);
+				
+				if (active_opts.windup_action != WINDUP_SHOOT_ONCE_IF_HELD or windupHeld)
+					DoAttack(true);
 			}
 		}
 		else
@@ -836,10 +999,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			{
 				self.SendWeaponAnim( active_opts.windup_anim, 0, 0 );
 				
-				if (active_opts.windup_snd.file.Length() > 0)
-					g_SoundSystem.EmitSoundDyn( self.m_pPlayer.edict(), CHAN_STATIC, active_opts.windup_snd.file, 
-												1.0, ATTN_NORM, 0, 512 );
-											
+				active_opts.windup_snd.play(self.m_pPlayer, CHAN_STATIC, 1.0f, active_opts.windup_pitch_start);											
 				windupSoundActive = true;
 			}
 			else if (timePassed < active_opts.windup_time)
@@ -852,10 +1012,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				int newPitch = active_opts.windup_pitch_start + int(delta*p + 0.5f);
 				//println("T : " + newPitch);
 				
-				if (active_opts.windup_snd.file.Length() > 0)
-					g_SoundSystem.EmitSoundDyn( self.m_pPlayer.edict(), CHAN_STATIC, active_opts.windup_snd.file, 
-												1.0, ATTN_NORM, SND_CHANGE_PITCH, newPitch);
-											
+				if (newPitch != active_opts.windup_pitch_start)
+					active_opts.windup_snd.play(self.m_pPlayer, CHAN_STATIC, 1.0f, newPitch, SND_CHANGE_PITCH);
+				
 				int ammoUsedNow = int(p*active_opts.windup_cost + 0.5f);
 				DepleteAmmo(Math.max(0, ammoUsedNow - windupAmmoUsed));
 				windupAmmoUsed = ammoUsedNow;
@@ -866,19 +1025,21 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				if (!windupFinished)
 					debugln("Windup Multiplier: " + windupMultiplier);
 				windupFinished = true;
-				if (active_opts.windup_action == WINDUP_SHOOT_ONCE)
+				
+				bool onceHeld = active_opts.windup_action == WINDUP_SHOOT_ONCE_IF_HELD and windupHeld;
+				if (active_opts.windup_action == WINDUP_SHOOT_ONCE or onceHeld)
 				{
 					windingUp = false;
 					windupSoundActive = false;
 					if (active_opts.windup_snd.file.Length() > 0)
 						g_SoundSystem.StopSound( self.m_pPlayer.edict(), CHAN_STATIC, active_opts.windup_snd.file);
-					if (AllowedToShoot())
+					if (AllowedToShoot(active_opts))
 						DoAttack(true);
 						
 				}
 				if (active_opts.windup_action == WINDUP_SHOOT_CONSTANT)
 				{
-					if (AllowedToShoot() and windupHeld)
+					if (AllowedToShoot(active_opts) and windupHeld)
 					{
 						if (cooldownFinished())
 						{
@@ -908,6 +1069,65 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (self.m_pPlayer is null)
 			return;
 			
+		if (laser_spr)
+		{
+			CBaseEntity@ ent = laser_spr;
+			if (unhideLaserTime > g_Engine.time)
+			{
+				// temporarily hide the laser
+				ent.pev.effects |= EF_NODRAW;
+			}
+			else
+			{
+				if (ent.pev.effects & EF_NODRAW != 0)
+					ent.pev.effects &= ~EF_NODRAW;
+				
+				Vector vecSrc	 = self.m_pPlayer.GetGunPosition();
+				Math.MakeVectors( self.m_pPlayer.pev.v_angle );
+				
+				TraceResult tr;
+				Vector vecEnd = vecSrc + g_Engine.v_forward * 65536;
+				g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, self.m_pPlayer.edict(), tr );
+				
+				ent.pev.origin = tr.vecEndPos;
+			}
+		}
+		
+		if (needShellEject and ejectShellTime < g_Engine.time)
+		{
+			EjectShell();
+			needShellEject = false;
+		}
+		
+		if (reloading > 0)
+		{
+			if (nextReload < g_Engine.time)
+			{
+				if (reloading == 2)
+				{
+					self.SendWeaponAnim( settings.reload_end_anim );
+					settings.reload_end_snd.play(self.m_pPlayer, CHAN_STATIC);
+					nextShootTime = g_Engine.time + settings.reload_end_time;
+					self.m_flTimeWeaponIdle = nextShootTime;
+					reloading = 0;
+				}
+				else
+				{
+					if (reloading == 1 and ReloadContinuous())
+					{
+						reloading = 2;
+					}
+
+					BaseClass.Reload();
+					self.SendWeaponAnim( settings.reload_anim );
+					settings.reload_snd.play(self.m_pPlayer, CHAN_STATIC);
+					nextReload = g_Engine.time + settings.reload_time;
+					nextShootTime = nextReload;
+				}
+				
+			}
+		}
+			
 		if (beam_active)
 		{
 			if (self.m_pPlayer.pev.button & 1 != 0 and minBeamTime == 0 or first_beam_shoot) 
@@ -936,7 +1156,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		}
 		else if (burstFiring)
 		{
-			if (!AllowedToShoot())
+			if (!AllowedToShoot(active_opts))
 				burstFiring = false;
 			else if (g_Engine.time > nextBurstFire)
 			{
@@ -952,6 +1172,38 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			WindupThink();
 		}
+		else if (shootingHook)
+		{
+			if (windupHeld and hook_ent)
+			{
+				if (!hookAnimStarted and hookAnimStartTime <= g_Engine.time)
+				{
+					hookAnimStarted = true;
+					active_opts.hook_snd.play(self.m_pPlayer, CHAN_WEAPON);
+					self.SendWeaponAnim( active_opts.hook_anim, 0, 0 );
+				}
+			}
+			else
+			{
+				shootingHook = false;
+				if (hook_ent)
+				{
+					CBaseEntity@ hookEnt = hook_ent;
+					WeaponCustomProjectile@ hookEnt_c = cast<WeaponCustomProjectile@>(CastToScriptClass(hookEnt));
+					hookEnt_c.uninstall_steam_and_kill_yourself();
+				}
+				
+				active_opts.hook_snd.stop(self.m_pPlayer, CHAN_WEAPON);
+				active_opts.hook_snd2.play(self.m_pPlayer, CHAN_WEAPON);
+				self.SendWeaponAnim( active_opts.hook_anim2, 0, 0 );
+				self.m_flTimeWeaponIdle = g_Engine.time + active_opts.hook_delay2; // idle after this
+				
+				if (hook_beam !is null)
+					g_EntityFuncs.Remove( hook_beam );
+				@hook_beam = null;
+			}
+			windupHeld = false;
+		}
 		else if (!canShootAgain)
 		{
 			// wait for user to stop holding trigger
@@ -959,7 +1211,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				canShootAgain = true;
 			}	
 		}
-		else
+		else if (!laser_spr and !needShellEject and reloading == 0)
 			return;
 		self.pev.nextthink = g_Engine.time;
 	}
@@ -971,18 +1223,91 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		else if (active_fire == 0) nextAttack = self.m_flNextPrimaryAttack;
 		else if (active_fire == 1) nextAttack = self.m_flNextSecondaryAttack;
 		else if (active_fire == 2) nextAttack = self.m_flNextTertiaryAttack;
+		nextAttack = nextShootTime; // TODO: Remove above code
 		return nextAttack <= g_Engine.time;
+	}
+	
+	void Cooldown(weapon_custom_shoot@ opts)
+	{
+		// cooldown
+		if (windingUp) 
+		{
+			// no cooldown during windups or else we don't know if the button is still pressed
+			nextWindupShoot = WeaponTimeBase() + opts.cooldown;
+		}
+		else
+		{
+			float cooldownVal = opts.cooldown;
+			if (opts.shoot_type == SHOOT_MELEE and (!meleeHit or abortAttack))
+				cooldownVal = opts.melee_miss_cooldown;
+			//self.m_flNextPrimaryAttack = WeaponTimeBase() + cooldownVal;
+			//self.m_flNextSecondaryAttack = WeaponTimeBase() + cooldownVal;
+			//self.m_flNextTertiaryAttack = WeaponTimeBase() + cooldownVal;
+			nextShootTime = WeaponTimeBase() + cooldownVal;
+		}
+	}
+	
+	bool FailAttack(weapon_custom_shoot@ opts)
+	{
+		if (!abortAttack)
+			return false;
+
+		WeaponSound@ snd = opts.getRandomShootFailSound();
+		if (snd !is null)
+			snd.play(self.m_pPlayer, CHAN_WEAPON);
+			
+		Cooldown(opts);
+		return true;
+	}
+	
+	void EjectShell()
+	{
+		if (active_opts.shell_delay > 0)
+			active_opts.shell_delay_snd.play(self.m_pPlayer, CHAN_ITEM);
+			
+		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
+							  
+		Vector ofs = active_opts.shell_offset;
+		Vector vel = active_opts.shell_vel;
+		ofs = ofs.x*g_Engine.v_right + ofs.y*g_Engine.v_up + ofs.z*g_Engine.v_forward;
+		vel = vel.x*g_Engine.v_right + vel.y*g_Engine.v_up + vel.z*g_Engine.v_forward;
+		float speed = vel.Length();
+		float spread = active_opts.shell_spread;
+		vel = resizeVector(spreadDir(vel, spread), speed + Math.RandomFloat(-spread, spread));
+		
+		Vector shellOri = self.m_pPlayer.GetGunPosition() + ofs;
+		Vector shellVel = self.m_pPlayer.pev.velocity + vel;
+		float shellRot = 1000; // has no effect... broken paramater?
+		TE_BOUNCE bounceSnd = active_opts.shell_type == SHELL_SHOTGUN ? TE_BOUNCE_SHOTSHELL : TE_BOUNCE_SHELL;
+		
+		g_EntityFuncs.EjectBrass(shellOri, shellVel, shellRot, active_opts.shell_idx, bounceSnd);
+		if (debug_mode)
+			te_beampoints(shellOri, shellOri + resizeVector(shellVel, 32));
 	}
 	
 	// do everything except actually shooting something
 	void AttackEffects(bool windupAttack=false)
 	{
+		if (FailAttack(active_opts))
+			return;
+		
 		// kickback
-		Vector kickVel = self.m_pPlayer.GetAutoaimVector(0) * -active_opts.kickback;
+		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
+		
+		Vector kickVel = g_Engine.v_forward * -active_opts.kickback;
 		self.m_pPlayer.pev.velocity = self.m_pPlayer.pev.velocity + kickVel;
 		
+		int ammo_cost = partialAmmoUsage != -1 ? partialAmmoUsage : active_opts.ammo_cost;
+		DepleteAmmo(ammo_cost);
+		
 		// play random first-person weapon animation
-		self.SendWeaponAnim( meleeHit ? getRandomMeleeAnim() : getRandomShootAnim(), 0, 0 );
+		if (!hookAnimStarted or meleeHit)
+		{
+			int anim = meleeHit ? getRandomMeleeAnim() : active_opts.shoot_empty_anim;
+			if (!meleeHit and (!EmptyShoot() or anim < 0))
+				anim = getRandomShootAnim();
+			self.SendWeaponAnim( anim, 0, 0 );
+		}
 		
 		// thirperson animation
 		if (!windupAttack)
@@ -998,7 +1323,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		}
 		
 		// recoil
-		self.m_pPlayer.pev.punchangle.x = 0;//Math.RandomLong(-180, 180);
+		self.m_pPlayer.pev.punchangle.x = -Math.RandomFloat(active_opts.recoil.x, active_opts.recoil.y);
 		self.m_pPlayer.pev.punchangle.y = 0;//Math.RandomLong(-180, 180);
 		self.m_pPlayer.pev.punchangle.z = 0;//Math.RandomLong(-180, 180);
 		//self.m_pPlayer.pev.punchangle.y = 0;
@@ -1007,14 +1332,16 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		self.m_flTimeWeaponIdle = WeaponTimeBase() + g_PlayerFuncs.SharedRandomFloat( self.m_pPlayer.random_seed,  10, 15 );
 		
 		// random shoot sound
-		
+		shootCount++;
 		bool meleeSkip = active_opts.shoot_type == SHOOT_MELEE;
-		meleeSkip = meleeSkip and (active_opts.pev.spawnflags & FL_SHOOT_NO_MELEE_SOUND_OVERLAP != 0);
-		if (!meleeSkip)
+		bool noOverlap = active_opts.pev.spawnflags & FL_SHOOT_NO_MELEE_SOUND_OVERLAP != 0;
+		meleeSkip = meleeSkip and noOverlap;
+		if (!meleeSkip and !shootingHook)
 		{
 			WeaponSound@ snd = active_opts.getRandomShootSound();
+			SOUND_CHANNEL channel = shootCount % 2 == 0 or noOverlap ? CHAN_WEAPON : CHAN_STATIC;
 			if (snd !is null)
-				snd.play(self.m_pPlayer, CHAN_WEAPON);
+				snd.play(self.m_pPlayer, channel);
 		}
 		
 		// monster reactions to shooting or danger
@@ -1022,43 +1349,57 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		bool harmlessWep = hmode == HEAL_ALL or active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0;
 		if (!healedTarget and !harmlessWep)
 		{
-			// get a little spooked
+			// get spooked
 			self.m_pPlayer.m_iWeaponFlash = BRIGHT_GUN_FLASH;
 			self.m_pPlayer.m_iWeaponVolume = NORMAL_GUN_VOLUME;
 			self.m_pPlayer.m_iExtraSoundTypes = bits_SOUND_COMBAT;//bits_SOUND_DANGER;
 			self.m_pPlayer.m_flStopExtraSoundTime = WeaponTimeBase() + 0.2;
 		}
-			
-		DepleteAmmo(active_opts.ammo_cost);
-			
-		// cooldown
-		if (windingUp) 
+		
+		// eject shell
+		if (active_opts.shell_type != SHELL_NONE)
 		{
-			// no cooldown during windups or else we don't know if the button is still pressed
-			nextWindupShoot = WeaponTimeBase() + active_opts.cooldown;
+			if (active_opts.shell_delay == 0)
+				EjectShell();
+			else
+			{
+				needShellEject = true;
+				ejectShellTime = WeaponTimeBase() + active_opts.shell_delay;
+				self.pev.nextthink = g_Engine.time;
+			}
 		}
-		else
+		
+		// muzzle flash
+		int flash_size = int(active_opts.muzzle_flash_adv.x);
+		int flash_life = int(active_opts.muzzle_flash_adv.y);
+		int flash_decay = int(active_opts.muzzle_flash_adv.z);
+		Color flash_color = Color(active_opts.muzzle_flash_color);
+		bool isBlack = flash_color.r == 0 and flash_color.g == 0 and flash_color.b == 0;
+		if (flash_life > 0 and flash_size > 0 and !isBlack)
 		{
-			float cooldownVal = active_opts.cooldown;
-			if (active_opts.shoot_type == SHOOT_MELEE and !meleeHit)
-				cooldownVal = active_opts.melee_miss_cooldown;
-			self.m_flNextPrimaryAttack = WeaponTimeBase() + cooldownVal;
-			self.m_flNextSecondaryAttack = WeaponTimeBase() + cooldownVal;
-			self.m_flNextTertiaryAttack = WeaponTimeBase() + cooldownVal;
+			Vector lpos = self.m_pPlayer.pev.origin + g_Engine.v_forward * 50;
+			te_dlight(lpos, flash_size, flash_color, flash_life, flash_decay);
 		}
+		
+		Cooldown(active_opts);
 	}
-	
-	bool AttackButtonPressed()
-	{
-		if (active_fire == 0) return self.m_pPlayer.pev.button & 1 != 0;
-		if (active_fire == 1) return self.m_pPlayer.pev.button & 2048 != 0;
-		return false;
-	}
-	
+		
 	void DoAttack(bool windupAttack=false)
-	{		
+	{	
+		reloading = 0;
 		healedTarget = false;
 		abortAttack = false;
+		partialAmmoUsage = -1;
+		
+		partialAmmoModifier = 1.0f;
+		if (active_opts.pev.spawnflags & FL_SHOOT_PARTIAL_AMMO_SHOOT != 0)
+		{
+			if (settings.clip_size() > 0)
+				partialAmmoModifier = float(self.m_iClip) / float(active_opts.ammo_cost);
+			else
+				partialAmmoModifier = AmmoLeft(active_ammo_type) / float(active_opts.ammo_cost);
+			partialAmmoModifier = Math.min(1.0f, partialAmmoModifier);
+		}
 		
 		// shoot stuff
 		switch(active_opts.shoot_type)
@@ -1068,10 +1409,76 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			case SHOOT_PROJECTILE: ShootProjectile(); break;
 			case SHOOT_BEAM: ShootBeam(); break;
 		}
+		if (active_opts.hook_type != HOOK_DISABLED)
+			ShootHook();
 		DetonateSatchels();
 		
-		if (!abortAttack)
-			AttackEffects(windupAttack);
+		AttackEffects(windupAttack);
+	}
+	
+	// special logic for stopping revive windup if no revive target in range
+	bool PreventReviveStart(weapon_custom_shoot@ opts)
+	{	
+		bool reviveOnly = opts.heal_mode >= HEAL_REVIVE_FRIENDS;
+		
+		if (!reviveOnly or opts.shoot_type == SHOOT_PROJECTILE)
+			return false;
+		
+		Vector vecSrc	 = self.m_pPlayer.GetGunPosition();
+		
+		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
+		
+		Vector vecAiming = spreadDir(g_Engine.v_forward, opts.bullet_spread, opts.bullet_spread_func);
+		
+		// Do the bullet collision
+		TraceResult tr;
+		Vector vecEnd = vecSrc + vecAiming * opts.max_range;
+		g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, self.m_pPlayer.edict(), tr );
+		//te_beampoints(vecSrc, vecEnd);
+		
+		if ( tr.flFraction >= 1.0 and opts.shoot_type == SHOOT_MELEE)
+		{
+			// This does a trace in the form of a box so there is a much higher chance of hitting something
+			// From crowbar.cpp in the hlsdk:
+			g_Utility.TraceHull( vecSrc, vecEnd, dont_ignore_monsters, head_hull, self.m_pPlayer.edict(), tr );
+			if ( tr.flFraction < 1.0 )
+			{
+				// Calculate the point of intersection of the line (or hull) and the object we hit
+				// This is and approximation of the "best" intersection
+				CBaseEntity@ pHit = g_EntityFuncs.Instance( tr.pHit );
+				if ( pHit is null or pHit.IsBSPModel() )
+					g_Utility.FindHullIntersection( vecSrc, tr, tr, VEC_DUCK_HULL_MIN, VEC_DUCK_HULL_MAX, self.m_pPlayer.edict() );
+				vecEnd = tr.vecEndPos;	// This is the point on the actual surface (the hull could have hit space)
+			}
+		}
+		
+		bool revivedSomething = false;
+		
+		if (reviveOnly)
+		{
+			CBaseEntity@ revTarget = getReviveTarget(tr.vecEndPos, REVIVE_RADIUS, self.m_pPlayer, opts);
+			if (revTarget !is null)
+			{
+				// prevent the corpse from fading before windup finishes
+				revTarget.BeginRevive(opts.windup_time);
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	// Returns true when finished
+	bool ReloadContinuous()
+	{
+		if (settings.clip_size() <= 0)
+			return true;
+		if (AmmoLeft(active_ammo_type) < settings.reload_ammo_amt)
+			return true;
+		
+		int reloadAmt = Math.min(settings.clip_size() - self.m_iClip, settings.reload_ammo_amt);
+		self.m_iClip += reloadAmt;
+		self.m_pPlayer.m_rgAmmo( active_ammo_type, Math.max(0, AmmoLeft(active_ammo_type)-reloadAmt));
+		return self.m_iClip >= settings.clip_size();
 	}
 	
 	void DepleteAmmo(int amt)
@@ -1080,17 +1487,17 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (self.m_iClip > 0) 
 			self.m_iClip -= amt;
 		else // gun doesn't use a clip
-			self.m_pPlayer.m_rgAmmo( active_ammo_type, AmmoLeft()-amt);
+			self.m_pPlayer.m_rgAmmo( active_ammo_type, Math.max(0, AmmoLeft(active_ammo_type)-amt));
 			
 		if( self.m_pPlayer.m_rgAmmo(active_ammo_type) <= 0 )
 			// HEV suit - indicate out of ammo condition
 			self.m_pPlayer.SetSuitUpdate( "!HEV_AMO0", false, 0 );
 	}
 	
-	int AmmoLeft()
+	int AmmoLeft(int ammoType)
 	{
-		if (active_ammo_type == -1) return -1; // doesn't use ammo
-		return Math.max(0, self.m_pPlayer.m_rgAmmo( active_ammo_type ));
+		if (ammoType == -1) return -1; // doesn't use ammo
+		return Math.max(0, self.m_pPlayer.m_rgAmmo( ammoType ));
 	}
 	
 	// returns true if a windup was started
@@ -1102,6 +1509,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			windingDown = false;
 			windupFinished = false;
 			windupHeld = true;
+			windupSoundActive = false;
 			windupMultiplier = 1.0f;
 			windupStart = g_Engine.time;
 			self.pev.nextthink = g_Engine.time;
@@ -1121,13 +1529,44 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		return false;
 	}
 	
-	bool CanStartAttack(weapon_custom_shoot@ opts)
+	void ShowLaser()
 	{
+		if (!laser_spr)
+		{
+			CSprite@ dot = g_EntityFuncs.CreateSprite( settings.laser_sprite, self.m_pPlayer.pev.origin, true, 10 );
+			dot.pev.rendermode = kRenderGlow;
+			dot.pev.renderamt = 255;
+			dot.pev.renderfx = kRenderFxNoDissipation;
+			dot.pev.movetype = MOVETYPE_NONE;
+			laser_spr = dot;
+			self.pev.nextthink = g_Engine.time;
+		} 
+	}
+	
+	void HideLaser()
+	{
+		if (laser_spr)
+		{
+			CBaseEntity@ ent = laser_spr;
+			g_EntityFuncs.Remove( ent );
+		}
+	}
+	
+	bool CanStartAttack(weapon_custom_shoot@ opts)
+	{			
 		if (windingUp)
 		{
 			windupHeld = true;
 			return false;
 		}
+		
+		if (shootingHook)
+		{
+			windupHeld = true;
+		}
+		
+		if (!cooldownFinished())
+			return false;
 		
 		if (opts.pev.spawnflags & FL_SHOOT_NO_AUTOFIRE != 0)
 		{
@@ -1138,29 +1577,56 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			self.pev.nextthink = g_Engine.time;
 		}
 		
-		return AllowedToShoot();
-	}
-	
-	bool AllowedToShoot()
-	{
-		// don't fire underwater
-		if( self.m_pPlayer.pev.waterlevel == WATERLEVEL_HEAD and !active_opts.can_fire_underwater())
+		if (PreventReviveStart(opts))
 		{
-			self.PlayEmptySound( );
-			SetNextAttack(WeaponTimeBase() + 0.15);
+			abortAttack = true;
+			FailAttack(opts);
 			return false;
 		}
 		
-		if( self.m_iClip <= 0 )
+		return AllowedToShoot(opts);
+	}
+	
+	bool AllowedToShoot(weapon_custom_shoot@ opts)
+	{
+		bool canshoot = true;
+		bool emptySound = false;
+		
+		// don't fire underwater
+		if( self.m_pPlayer.pev.waterlevel == WATERLEVEL_HEAD and !opts.can_fire_underwater())
 		{
-			if (settings.clip_size() > 0 or AmmoLeft() == 0) {
-				self.PlayEmptySound();
-				SetNextAttack(WeaponTimeBase() + 0.15);
-				return false;
+			emptySound = true;
+			canshoot = false;
+		}
+		
+		int ammoType = self.m_iPrimaryAmmoType;
+		if (opts.isSecondary() or (opts.isTertiary() and opts.weapon.tertiary_ammo_type == TAMMO_SAME_AS_SECONDARY))
+			ammoType = self.m_iSecondaryAmmoType;
+			
+		if (ammoType != -1) // ammo used at all?
+		{
+			bool partialAmmoShoot = (opts.pev.spawnflags & FL_SHOOT_PARTIAL_AMMO_SHOOT) != 0;
+			bool emptyClip = settings.clip_size() > 0 and self.m_iClip < opts.ammo_cost;
+			bool emptyAmmo = settings.clip_size() <= 0 and AmmoLeft(ammoType) < opts.ammo_cost;
+			emptyClip = emptyClip and (!partialAmmoShoot or self.m_iClip <= 0);
+			emptyAmmo = emptyAmmo and (!partialAmmoShoot or AmmoLeft(ammoType) <= 0);
+			if (emptyClip or emptyAmmo)
+			{
+				PlayEmptySound();
+				emptySound = true;
+				canshoot = false;
 			}
 		}
 		
-		return true;
+		if (!canshoot)
+		{
+			abortAttack = true;
+			if (emptySound)
+				self.PlayEmptySound();
+			FailAttack(opts);
+		}
+		
+		return canshoot;
 	}
 	
 	float GetNextAttack()
@@ -1180,8 +1646,44 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void CommonAttack(int attackNum)
 	{
+
 		int next_fire = attackNum;
-		weapon_custom_shoot@ next_opts = settings.fire_settings[next_fire];
+		weapon_custom_shoot@ next_opts = @settings.fire_settings[next_fire];
+		weapon_custom_shoot@ alt_opts = @settings.alt_fire_settings[next_fire];
+		
+		int fireAct = next_fire == 1 ? settings.secondary_action : settings.tertiary_action;
+		if (fireAct != FIRE_ACT_SHOOT)
+		{
+			if (nextActionTime > g_Engine.time)
+				return;
+			if (fireAct == FIRE_ACT_LASER)
+			{
+				if (!laser_spr)
+					ShowLaser();
+				else
+					HideLaser();
+			}
+			if (fireAct == FIRE_ACT_ZOOM)
+			{
+				self.SetFOV(primaryAlt ? 0 : settings.zoom_fov);
+			}
+			primaryAlt = !primaryAlt;
+			
+			weapon_custom_shoot@ p_opts = @settings.fire_settings[0];
+			weapon_custom_shoot@ p_alt_opts = @settings.alt_fire_settings[0];
+			
+			weapon_custom_shoot@ next_p_opts = primaryAlt ? @p_alt_opts : @p_opts;
+			next_p_opts.toggle_snd.play(self.m_pPlayer, CHAN_STATIC);
+			if (next_p_opts.toggle_txt.Length() > 0)
+				g_PlayerFuncs.PrintKeyBindingString(self.m_pPlayer, next_p_opts.toggle_txt);
+			
+			nextActionTime = WeaponTimeBase() + 0.5;
+			
+			return;
+		}
+		
+		if (next_fire == 0 and primaryAlt and settings.primary_alt_fire.Length() > 0)
+			@next_opts = @alt_opts;
 	
 		if (next_opts.pev is null or !CanStartAttack(next_opts))
 			return;
@@ -1199,9 +1701,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		}
 		else if (next_fire == 2)
 		{
-			if (settings.tertiary_ammo_type == 1)
+			if (settings.tertiary_ammo_type == TAMMO_SAME_AS_PRIMARY)
 				active_ammo_type = self.m_iPrimaryAmmoType;
-			if (settings.tertiary_ammo_type == 2) 
+			if (settings.tertiary_ammo_type == TAMMO_SAME_AS_SECONDARY) 
 				active_ammo_type = self.m_iSecondaryAmmoType;
 		}
 		
@@ -1215,12 +1717,43 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void SecondaryAttack() { CommonAttack(1); }
 	void TertiaryAttack()  { CommonAttack(2); }
 	
+	bool EmptyShoot()
+	{
+		return (settings.clip_size() > 0 and self.m_iClip == 0) or 
+				(settings.clip_size() == 0 and AmmoLeft(active_ammo_type) == 0);
+	}
+	
 	void Reload()
 	{
-		self.DefaultReload( settings.clip_size(), MP5_RELOAD, 1.5, 0 );
+		if (!cooldownFinished() or reloading > 0)
+			return;
+		
+		if (settings.pev.spawnflags & FL_WEP_CONTINUOUS_RELOAD != 0 and 
+			self.m_iClip < settings.clip_size() and AmmoLeft(active_ammo_type) >= settings.reload_ammo_amt)
+		{
+			self.SendWeaponAnim( settings.reload_start_anim );
+			reloading = 1;
+			nextReload = WeaponTimeBase() + settings.reload_start_time;
+			nextShootTime = nextReload;
+			self.pev.nextthink = g_Engine.time;
+			settings.reload_start_snd.play(self.m_pPlayer, CHAN_STATIC);
+			return;
+		}
+		
+		int reloadAnim = settings.reload_empty_anim;
+		if (reloadAnim < 0 or !EmptyShoot())
+			reloadAnim = settings.reload_anim;
+			
+		bool reloaded = self.DefaultReload( settings.clip_size(), reloadAnim, settings.reload_time, 0 );
 
 		//Set 3rd person reloading animation -Sniper
 		BaseClass.Reload();
+		
+		if (reloaded)
+		{
+			settings.reload_snd.play(self.m_pPlayer, CHAN_STATIC);
+			unhideLaserTime = WeaponTimeBase() + settings.reload_time;
+		}
 	}
 
 	void WeaponIdle()
