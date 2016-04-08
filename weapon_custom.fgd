@@ -7,23 +7,45 @@
 		4 : "No Empty Switch" : 0
 		8 : "Limit In World" : 0
 		16 : "Exhaustible" : 0
+		32 : "Hide Secondary Ammo" : 0
+		64 : "Laser Sight" : 0
+		128 : "Continuous Reload" : 0
 	]
 	
 	targetname(target_source) : "Name"
 	weapon_name(string) : "Weapon Class" : "weapon_test"
 	skin(integer) : "Clip Size (0 = none used)" : 80
 	
-	primary_fire(string) : "Primary Fire (weapon_custom_shoot)"
+	primary_fire(string) : "Primary Fire"
+	primary_alt_fire(string) : "Primary Alternate Fire"
 	primary_reload_snd(string) : "Primary Reload Sound" : ""
 	primary_empty_snd(string) : "Primary Empty Sound" : ""
 	primary_ammo(string) : "Primary Ammo Type" : ""
+	primary_regen_time(string) : "Primary Ammo Regen Time" : "1"
+	primary_regen_amt(string) : "Primary Ammo Regen Amount" : "0"
 	
-	secondary_fire(string) : "Secondary Fire (weapon_custom_shoot)"
-	secondary_reload_snd(string) : "Secondary Reload Sound" : ""
+	secondary_action(choices) : "Secondary Action" : 0 =
+	[
+		0 : "Shoot"
+		1 : "Toggle Laser Sight"
+		2 : "Toggle Zoom"
+		3 : "Toggle Primary Fire Mode"
+	]
+	secondary_fire(string) : "Secondary Fire"
+	// secondary_reload_snd(string) : "Secondary Reload Sound" : ""
 	secondary_empty_snd(string) : "Secondary Empty Sound" : ""
 	secondary_ammo(string) : "Secondary Ammo Type" : ""
+	secondary_regen_time(string) : "Secondary Ammo Regen Time" : "1"
+	secondary_regen_amt(string) : "Secondary Ammo Regen Amount" : "0"
 	
-	tertiary_fire(string) : "Tertiary Fire (weapon_custom_shoot)"
+	tertiary_action(choices) : "Tertiary Action" : 0 =
+	[
+		0 : "Shoot"
+		1 : "Toggle Laser Sight"
+		2 : "Toggle Zoom"
+		3 : "Toggle Primary Fire Mode"
+	]
+	tertiary_fire(string) : "Tertiary Fire"
 	tertiary_empty_snd(string) : "Tertiary Empty Sound" : ""
 	tertiary_ammo(choices) : "Tertiary Ammo Type" : 0 =
 	[
@@ -36,6 +58,20 @@
 	wpn_w_model(string) : "W_Model" : "models/hl/w_9mmar.mdl"
 	wpn_p_model(string) : "P_Model" : "models/hl/p_9mmar.mdl"
 	
+	reload_time(string) : "Reload Time" : "1"
+	reload_anim(string) : "Reload Animation" : ""
+	reload_snd(string) : "Reload Sound" : ""
+	reload_empty_anim(string) : "Reload Empty Animation" : "-1"
+	
+	reload_start_time(string) : "Reload Continuous Start Time" : "0.5"
+	reload_end_time(string) : "Reload Continuous End Time" : "0.5"
+	reload_start_anim(string) : "Reload Continuous Start Animation" : ""
+	reload_end_anim(string) : "Reload Continuous End Animation" : ""
+	reload_start_snd(string) : "Reload Continuous Start Sound" : ""
+	reload_end_snd(string) : "Reload Continuous End Sound" : ""
+	reload_ammo_amt(string) : "Reload Continuous Ammo Amount" : "1"
+	
+	deploy_time(string) : "Deploy Time" : "1"
 	deploy_anim(string) : "Deploy Animation" : ""
 	idle_anims(string) : "Idle Animations" : ""
 	idle_time(string) : "Idle Animation Time (Seconds)" : ""
@@ -61,6 +97,8 @@
 		13 : "Minigun"
 	] 
 	
+	laser_sprite(string) : "Laser Sight Sprite" : ""
+	zoom_fov(integer) : "Zoom FOV (Degrees)" : 40
 	hud_sprite(string) : "HUD Sprite"
 	sprite_directory(string) : "HUD Sprite Info Folder" : "weapon_custom"
 	
@@ -112,6 +150,7 @@
 	health(string) : "Volume (1-100)" : "100"
 	rendermode(string) : "Pitch (1-255)" : "100"
 	renderfx(string) : "Pitch Variation (0-100)" : "0"
+	friction(string) : "Delay (Seconds)" : "0"
 	noise(string) : "Linked Sound" : ""
 ]
 
@@ -121,10 +160,10 @@
 	[
 		1 : "Don't Fire On Damage" : 0
 		2 : "Don't Fire On Miss" : 0
-		4 : "No Melee Sound Overlap" : 0
+		4 : "No Sound Overlap" : 0 // stop melee hit+swing and bullet channel switching
 		8 : "Responsive Windup" : 0
-		16 : "Ricochet Sparks" : 0
-		32 : "Use Custom Explosion" : 0
+		16 : "Partial Ammo Shooting" : 0
+		32 : "" : 0
 		64 : "No Projectile Gravity" : 0
 		128 : "No Projectile Orienting" : 0
 		256 : "Works in water" : 0
@@ -134,9 +173,11 @@
 	targetname(target_source) : "Name"
 	sounds(string) : "Shoot Sounds" : ""
 	shoot_anims(string) : "Shoot Animations" : ""
+	shoot_empty_anim(string) : "Shoot Empty Animation" : "-1"
+	shoot_fail_snds(string) : "Shoot Failure Sounds" : ""
 	ammo_cost(string) : "Ammo Cost" : "1"
 	cooldown(string) : "Cooldown" : "0.15"
-	recoil(string) : "Recoil" : "2"
+	recoil(string) : "Recoil (Min Max)" : "-2 2"
 	kickback(string) : "Kickback (User Push)" : "0"
 	knockback(string) : "Knockback (Target Push)" : "10"
 	max_range(string) : "Max Range" : "4096"
@@ -146,6 +187,9 @@
 		1 : "Heal Friends"
 		2 : "Heal Foes"
 		3 : "Heal Friends & Foes"
+		4 : "Revive Friends"
+		5 : "Revive Foes"
+		6 : "Revive Friends & Foes"
 	]
 	heal_targets(choices) : "Heal Targets" : 0 =
 	[
@@ -157,31 +201,33 @@
 		5 : "Humans & Aleins"
 		6 : "Everything"
 	]
+	rico_angle(string) : "Ricochet Max Angle (Degrees)" : "0"
+	muzzle_flash_color(string) : "Muzzle Flash Color (R G B)" : "255 200 200"
+	muzzle_flash_adv(string) : "Muzzle Flash Adv. (Size Life Decay)" : "12 1 0"
+]
+
+@BaseClass = ShootName
+[
+	targetname(target_source) : "Name"
 ]
 
 @BaseClass = ShootBullet
 [
-	bullets(integer) : "Bullets" : 1
-	bullet_type(choices) : "Bullet Type (Damage)" : 1 =
+	shell_type(choices) : "Shell Ejection Type" : 0 =
 	[
-		1 : "sk_plr_9mm_bullet"
-		2 : "sk_plr_9mmAR_bullet"
-		3 : "sk_556_bullet"
-		4 : "sk_plr_762_bullet"
-		5 : "sk_plr_357_bullet"
-		6 : "sk_plr_357_bullet * 66%"
-		7 : "sk_plr_buckshot"
-		8 : "sk_plr_crowbar"
-		9 : "sk_plr_crowbar * 200%"
-		10: "Custom (Specified Below)"
-		// enumval Bullet BULLET_MONSTER_9MM 11
-		// enumval Bullet BULLET_MONSTER_MP5 12
-		// enumval Bullet BULLET_MONSTER_SAW 13
-		// enumval Bullet BULLET_MONSTER_12MM 14
-		// enumval Bullet BULLET_MONSTER_EAGLE 15
-		// enumval Bullet BULLET_MONSTER_SNIPER 16
-		// enumval Bullet BULLET_MONSTER_BUCKSHOT 17
+		0 : "None"
+		1 : "Small Casing"
+		2 : "Large Casing"
+		3 : "Shotgun Cartridge"
 	]
+	shell_model(string) : "Shell Custom Model" : ""
+	shell_offset(string) : "Shell Offset (RT UP FW)" : "0 0 0"
+	shell_vel(string) : "Shell Velocity (RT UP FW)" : "0 0 0"
+	shell_spread(string) : "Shell Spread (Degrees)" : "10"
+	shell_delay(string) : "Shell Ejection Delay" : "0"
+	shell_delay_snd(string) : "Shell Ejection Delay Sound" : ""
+	
+	bullets(integer) : "Bullets" : 1
 	bullet_damage(string) : "Bullet Custom Damage" : 10
 	bullet_spread(string) : "Bullet Spread (Degrees)" : "6"
 	bullet_spread_func(choices) : "Bullet Spread Function" : 0 =
@@ -330,6 +376,48 @@
 	melee_flesh_sounds(string) : "Melee Hit Flesh Sounds" : ""
 	melee_anims(string) : "Melee Hit Animations" : ""
 	melee_miss_cooldown(string) : "Melee Miss Cooldown" : ""
+	
+	hook_type(choices) : "Hook Type" : 0 =
+	[
+		0: "No Hook"
+		1 : "Projectile Hook"
+	]
+	hook_pull_mode(choices) : "Hook Mode" : 0 =
+	[
+		0 : "Pull"
+		1 : "Repel"
+	]
+	hook_targets(choices) : "Hook Targets" : 0 =
+	[
+		0 : "Everything"
+		1 : "World only"
+		2 : "Monsters only"
+	]
+	hook_force(string) : "Hook Pull Force" : "800"
+	hook_max_speed(string) : "Hook Max User Speed" : "800"
+	projectile_speed(string) : "Hook Projectile Speed" : "800"
+	projectile_impact_dmg(string) : "Hook Projectile Impact Damage" : "0"
+	hook_sound(string) : "Hook Extend Sound" : ""
+	hook_anim(string) : "Hook Extend Animation" : ""
+	hook_delay(string) : "Hook Extend Anim/Sound Delay" : ""
+	hook_sound2(string) : "Hook Retract Sound" : ""
+	hook_anim2(string) : "Hook Retract Animation" : ""
+	hook_delay2(string) : "Hook Retract Idle Delay" : ""
+	projectile_mdl(string) : "Hook End Model" : ""
+	projectile_spr(string) : "Hook End Sprite" : ""
+	hook_texture_filter(string) : "Hook Texture Filter" : ""
+	beam1_type(choices) : "Hook Beam Style" : 0 =
+	[
+		0 : "Linear"
+		1 : "Spiral"
+		2 : "Linear + Opaque"
+		3 : "Spiral + Opaque"
+	]
+	beam1_spr(string) : "Hook Beam Sprite" : ""
+	beam1_color(color255) : "Hook Beam Color (R G B A)" : "255 0 0 255"
+	beam1_width(integer) : "Hook Beam Width (1-255)" : 8
+	beam1_noise(integer) : "Hook Beam Noise (0-255)" : 1
+	beam1_scroll(integer) : "Hook Beam Scroll Rate (0-255)" : 32
 ]
 
 @BaseClass = ShootProjectile
@@ -363,31 +451,21 @@
 	projectile_trail_width(integer) : "Projectile Trail Width (1-255)" : 32
 	projectile_trail_color(color255) : "Projectile Trail Color (R G B A)" : "255 255 0 255"
 	projectile_size(string) : "Projectile Hull Size" : "4"
-	projectile_die_event(choices) : "Projectile Custom Life Expired Action" : 0 =
-	[
-		0 : "Disappear"
-		1 : "Explode"
-	]
+	effect3_name(string) : "Projectile Custom Life Expired Effect" : ""
 	projectile_world_event(choices) : "Projectile Custom Hit World Action" : 0 =
 	[
-		0 : "Disappear"
-		1 : "Explode"
-		2 : "Bounce"
-		3 : "Attach"
-		4 : "Bounce + Ricochet"
-		5 : "Bounce + Explosion"
-		6 : "Bounce + Ricochet + Explode"
+		0 : "Impact"
+		1 : "Bounce"
+		2 : "Attach"
 	]
+	effect1_name(string) : "Projectile Custom Hit World Effect" : ""
 	projectile_monster_event(choices) : "Projectile Custom Hit Monster Action" : 0 =
 	[
-		0 : "Damage"
-		1 : "Explode"
-		2 : "Bounce"
-		3 : "Attach"
-		4 : "Bounce + Ricochet"
-		5 : "Bounce + Explode"
-		6 : "Bounce + Ricochet + Explode"
-	]	
+		0 : "Impact"
+		1 : "Bounce"
+		2 : "Attach"
+	]
+	effect2_name(string) : "Projectile Custom Hit Monster Effect" : ""
 	projectile_bounce(string) : "Projectile Custom Elasticity (0-1)" : "0.9"
 	projectile_impact_dmg(string) : "Projectile Custom Impact Damage" : "100"
 ]
@@ -400,7 +478,9 @@
 	[
 		0 : "Linear"
 		1 : "Spiral"
-		2 : "Projectile"
+		2 : "Linear + Opaque"
+		3 : "Spiral + Opaque"
+		4 : "Projectile"
 	]
 	beam1_time(string) : "Beam 1 Duration (0 = constant)" : "0"
 	beam1_spr(string) : "Beam 1 Sprite" : ""
@@ -414,7 +494,9 @@
 		-1 : "Disabled"
 		0 : "Linear"
 		1 : "Spiral"
-		2 : "Projectile"
+		2 : "Linear + Opaque"
+		3 : "Spiral + Opaque"
+		4 : "Projectile"
 	]
 	beam2_time(string) : "Beam 2 Duration (0 = constant)" : "0"
 	beam2_spr(string) : "Beam 2 Sprite" : ""
@@ -434,6 +516,7 @@
 		0 : "Shoot On Release"
 		1 : "Shoot Once"
 		2 : "Shoot Constant"
+		3 : "Shoot Once If Held"
 	]
 	windup_cost(string) : "Wind Up Ammo Cost" : "0"
 	windup_mult(string) : "Wind Up Damage Multiplier" : "3"
@@ -452,10 +535,20 @@
 	windup_pitch_end(string) : "Wind Up Pitch End (0-255)" : "130"
 	windup_anim(string) : "Wind Up Animation" : "0"
 	wind_down_anim(string) : "Wind Down Animation" : "0"
+	toggle_snd(string) : "Toggle Sound" : ""
+	toggle_txt(string) : "Toggle Text" : ""
 ]
 
 @BaseClass = ShootEffects
 [
+	spawnflags(Flags) =
+	[
+		1 : "Explosion" : 0
+		2 : "Ricochet" : 0
+		4 : "Sparks" : 0
+	]
+	
+	sounds(string) : "Sounds" : ""
 	explosion_style(choices) : "Custom Explosion Style" : 0 =
 	[
 		0 : "Sprite"
@@ -466,7 +559,6 @@
 	explode_mag(string) : "Custom Explosion Size" : "100"
 	explode_dmg(string) : "Custom Explosion Damage" : "100"
 	explode_spr(string) : "Custom Explosion Sprite" : ""
-	explode_snd(string) : "Custom Explosion Sound" : ""
 	explode_decal(choices) : "Custom Explosion Decal" : 24 =
 	[	
 		-2 : "None"
@@ -527,8 +619,6 @@
 		64 : "Rock"
 	]
 	
-	rico_angle(string) : "Ricochet Max Angle (Degrees)" : "0"
-	rico_snds(string) : "Ricochet Sounds" : ""
 	rico_decal(choices) : "Ricochet Decal" : 24 =
 	[	
 		-2 : "None"
@@ -589,25 +679,25 @@
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(255 216 0) base(ShootGeneral, ShootAdvanced, ShootBullet) = weapon_custom_bullet : "Custom weapon Bullet event"
 [
-	custom_effect(string) : "Bullet Impact Effect" : ""
+	effect1_name(string) : "Bullet Impact Effect" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(255 64 64) base(ShootGeneral, ShootAdvanced, ShootMelee) = weapon_custom_melee : "Custom weapon Bullet event"
 [
-	custom_effect(string) : "Melee Impact Effect" : ""
+	effect1_name(string) : "Melee Impact Effect" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootAdvanced, ShootProjectile) = weapon_custom_projectile : "Custom weapon Bullet event"
 [
-	custom_effect(string) : "Impact Effect" : ""
+	effect1_name(string) : "Impact Effect" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootAdvanced, ShootBeam) = weapon_custom_beam : "Custom weapon Bullet event"
 [
-	custom_effect(string) : "Impact Effect" : ""
+	effect1_name(string) : "Impact Effect" : ""
 ]
 
-@PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 0) base(ShootEffects) = weapon_custom_effect : "Custom weapon impact effects"
+@PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 0) base(ShootName, ShootEffects) = weapon_custom_effect : "Custom weapon impact effects"
 [
 
 ]
