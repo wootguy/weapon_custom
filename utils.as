@@ -6,6 +6,7 @@ class Color
 	Color(uint8 r, uint8 g, uint8 b, uint8 a) { this.r = r; this.g = g; this.b = b; this.a = a; }
 	Color (Vector v) { this.r = int(v.x); this.g = int(v.y); this.b = int(v.z); this.a = 255; }
 	string ToString() { return "" + r + " " + g + " " + b + " " + a; }
+	Vector getRGB() { return Vector(r, g, b); }
 }
 
 Color RED    = Color(255,0,0);
@@ -72,6 +73,54 @@ array<float> rotationMatrix(Vector axis, float angle)
 		0.0,                               0.0,                               0.0,								 1.0
 	};
 	return mat;
+}
+
+// water splashes and bubble trails for bullets
+void water_bullet_effects(Vector vecSrc, Vector vecEnd)
+{
+	// bubble trails
+	bool startInWater = g_EngineFuncs.PointContents(vecSrc) == CONTENTS_WATER;
+	bool endInWater = g_EngineFuncs.PointContents(vecEnd) == CONTENTS_WATER;
+	if (startInWater or endInWater)
+	{
+		Vector bubbleStart = vecSrc;
+		Vector bubbleEnd = vecEnd;
+		Vector bubbleDir = bubbleEnd - bubbleStart;
+		float waterLevel;
+		
+		// find water level relative to trace start
+		Vector waterPos = startInWater ? bubbleStart : bubbleEnd;
+		waterLevel = g_Utility.WaterLevel(waterPos, waterPos.z, waterPos.z + 1024);
+		waterLevel -= bubbleStart.z;
+		
+		// get percentage of distance travelled through water
+		float waterDist = 1.0f; 
+		if (!startInWater or !endInWater)
+			waterDist -= waterLevel / (bubbleEnd.z - bubbleStart.z);
+		if (!endInWater)
+			waterDist = 1.0f - waterDist;
+		
+		// clip trace to just the water  portion
+		if (!startInWater)
+			bubbleStart = bubbleEnd - bubbleDir*waterDist;
+		else if (!endInWater)
+			bubbleEnd = bubbleStart + bubbleDir*waterDist;
+			
+		// a shitty attempt at recreating the splash effect
+		Vector waterEntry = endInWater ? bubbleStart : bubbleEnd;
+		if (!startInWater or !endInWater)
+			te_spritespray(waterEntry, Vector(0,0,1), g_watersplash_spr, 1, 64, 0);
+		
+		// waterlevel must be relative to the starting point
+		if (!startInWater or !endInWater)
+			waterLevel = bubbleStart.z > bubbleEnd.z ? 0 : bubbleEnd.z - bubbleStart.z;
+			
+		// calculate bubbles needed for an even distribution
+		int numBubbles = int( (bubbleEnd - bubbleStart).Length() / 128.0f );
+		numBubbles = Math.max(1, Math.min(255, numBubbles));
+		
+		te_bubbletrail(bubbleStart, bubbleEnd, "sprites/bubble.spr", waterLevel, numBubbles, 16.0f);
+	}
 }
 
 // create rotation matrix from euler angles
@@ -277,28 +326,6 @@ Vector spreadDir(Vector dir, float degrees, int spreadFunc=SPREAD_UNIFORM)
 	return vecAiming;
 }
 
-int g_ambientId = 0;
-void ambientSound(Vector origin, WeaponSound@ soundFile, int flags)
-{
-	// play global sound
-	string ambientName = "weapon_custom__" + g_ambientId;
-	dictionary keyvalues;
-	keyvalues["origin"] = origin.ToString();
-	keyvalues["targetname"] = ambientName;
-	keyvalues["message"] = soundFile.file;
-	keyvalues["pitch"] = string(soundFile.getPitch());
-	keyvalues["spawnflags"] = "" + flags;
-	keyvalues["playmode"] = "1";
-	keyvalues["health"] = string(soundFile.getVolume()*10);
-
-	CBaseEntity@ ambient = g_EntityFuncs.CreateEntity( "ambient_generic", keyvalues, true );
-	g_EntityFuncs.FireTargets(ambientName, null, null, USE_ON);
-	if (ambient !is null)
-		g_EntityFuncs.Remove(ambient);
-		
-	g_ambientId++;
-}
-
 class DecalTarget
 {
 	Vector pos;
@@ -311,19 +338,28 @@ class BeamImpact
 {
 	Vector pos;
 	CBaseEntity@ ent;
+	bool collision = true;
+}
+
+class BeamShot
+{
+	Vector startPos;
+	TraceResult tr;
+	CBaseEntity@ ent;
 }
 
 // Traces out in every direction in hopes of finding a surface
-DecalTarget getProjectileDecalTarget(CBaseEntity@ ent, float searchDist)
+DecalTarget getProjectileDecalTarget(CBaseEntity@ ent, Vector pos, float searchDist)
 {		
 	DecalTarget decalTarget = DecalTarget();
-	decalTarget.pos = ent.pev.origin;
+	decalTarget.pos = ent !is null ? ent.pev.origin : pos;
 	
 	TraceResult tr;
-	Vector src = ent.pev.origin;
+	Vector src = decalTarget.pos;
 	
-	float bboxSize = ent.pev.maxs.x - ent.pev.mins.x;
-	if (bboxSize < 0) bboxSize = -bboxSize; // there's no abs() util function??
+	float bboxSize = 0;
+	if (ent !is null)
+		bboxSize = abs(ent.pev.maxs.x - ent.pev.mins.x);
 	
 	Vector[] dirs = {
 		// Box sides
@@ -343,19 +379,24 @@ DecalTarget getProjectileDecalTarget(CBaseEntity@ ent, float searchDist)
 		Vector(0.577350, 0.577350, 0.577350),
 		Vector(-0.577350, 0.577350, 0.577350)
 	};	
-	
 	for (uint i = 0; i < dirs.length(); i++)
 	{
 		Vector end = src + dirs[i]*(bboxSize+searchDist);
-		g_Utility.TraceLine( src, end, ignore_monsters, ent.edict(), tr );
-		if (tr.flFraction < 1.0 and tr.pHit !is null)
+		edict_t@ edict = ent !is null ? ent.edict() : null;
+		g_Utility.TraceLine( src, end, ignore_monsters, edict, tr );
+		
+		//te_beampoints(src, end);
+		
+		if (tr.flFraction < 1.0 )
 		{
 			decalTarget.pos = tr.vecEndPos;
 			decalTarget.tr = tr;
-			@decalTarget.ent = g_EntityFuncs.Instance( tr.pHit );
-			
-			// get the texture too, we might need that for something
-			decalTarget.texture = g_Utility.TraceTexture( tr.pHit, src, end );
+			if (tr.pHit !is null)
+			{
+				@decalTarget.ent = g_EntityFuncs.Instance( tr.pHit );
+				// get the texture too, we might need that for something
+				decalTarget.texture = g_Utility.TraceTexture( tr.pHit, src, end );
+			}
 			
 			return decalTarget;
 		}
@@ -436,6 +477,8 @@ class WeaponCustomProjectile : ScriptBaseEntity
 	string pickup_classname;
 	bool weaponPickup = false;
 	float pickupRadius = 64.0f;
+	float nextBubbleTime = 0;
+	float bubbleDelay = 0.07;
 	
 	void Spawn()
 	{
@@ -525,6 +568,17 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		
 		if (move_snd_playing and pev.velocity.Length() == 0)
 			options.move_snd.stop(self, CHAN_BODY);
+			
+		if (!attached and g_EngineFuncs.PointContents(pev.origin) == CONTENTS_WATER)
+		{
+			if (nextBubbleTime < g_Engine.time)
+			{
+				Vector pos = pev.origin;
+				float waterLevel = g_Utility.WaterLevel(pos, pos.z, pos.z + 1024) - pos.z;
+				te_bubbletrail(pos, pos, "sprites/bubble.spr", waterLevel, 1, 16.0f);
+				nextBubbleTime = g_Engine.time + bubbleDelay;
+			}
+		}
 		
 		if (weaponPickup)
 		{
@@ -576,7 +630,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
 			
 		// damage done before hitgroup multipliers
-		float baseDamage = options.impact_dmg;
+		float baseDamage = shoot_opts.damage;
 		
 		if (baseDamage == 0)
 			return;
@@ -608,7 +662,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		}
 		
 		g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
-		ent.TraceAttack(owner.pev, baseDamage, vecAiming, tr, DMG_CLUB);
+		ent.TraceAttack(owner.pev, baseDamage, vecAiming, tr, shoot_opts.damageType(DMG_CLUB));
 		g_WeaponFuncs.ApplyMultiDamage(ent.pev, owner.pev);
 		
 		WeaponSound@ impact_snd;
@@ -639,7 +693,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 			if (!pOther.IsBSPModel())
 				return false;
 			
-			DecalTarget dt = getProjectileDecalTarget(self, 1);
+			DecalTarget dt = getProjectileDecalTarget(self, Vector(0,0,0), 1);
 			if (dt.texture.Find(shoot_opts.hook_texture_filter) != 0)
 				return false;
 		}
@@ -656,7 +710,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 			event = options.world_event;
 		else
 		{
-			effect = shoot_opts.effect2;
+			@effect = @shoot_opts.effect2;
 			event = options.monster_event;
 		}
 		
@@ -665,14 +719,19 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		if (weaponPickup)
 		{
 			// no more special effects after the first impact (pretend we're a weaponbox)
-			custom_effect_sound(effect, self);
+			WeaponSound@ rico_snd = effect.getRandomSound();
+			if (rico_snd !is null)
+				rico_snd.play(self.pev.origin, CHAN_STATIC);
 			pev.avelocity.x *= -0.9;
 			return; 
 		}
 		
 		DamageTarget(pOther);
 		knockBack(pOther, pev.velocity.Normalize() * shoot_opts.knockback);
-		custom_effect(self.pev.origin, effect, self);
+		CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
+		EHandle howner = owner;
+		EHandle htarget = pOther;
+		custom_effect(self.pev.origin, effect, self, htarget, howner);
 		ConvertToWeapon();
 		
 		switch(event)
@@ -705,109 +764,365 @@ int getRandomPitch(int variance)
 	return Math.RandomLong(100-variance, 100+variance);
 }
 
-void custom_effect_sound(weapon_custom_effect@ effect, CBaseEntity@ owner)
+void poisonDamage(EHandle target, EHandle attacker, float damage)
 {
-	WeaponSound@ rico_snd = effect.getRandomSound();
-	if (rico_snd !is null)
-	{
-		rico_snd.play(owner, CHAN_STATIC);
-	}
+	if (!target)
+		return;
+	if (!attacker)
+		return;
+		
+	CBaseEntity@ targetEnt = target;
+	CBaseEntity@ attackEnt = attacker;
+		
+	println("WOW BOTH HANDLES OK " + damage);
+	//g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
+	//TraceResult tr;
+	//targetEnt.TraceAttack(attackEnt.pev, damage, Vector(0,0,1), tr, DMG_POISON);
+	targetEnt.TakeDamage(targetEnt.pev, attackEnt.pev, damage, DMG_POISON);
+	//g_WeaponFuncs.ApplyMultiDamage(pHit.pev, self.m_pPlayer.pev);
 }
 
-void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creator)
+void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creator, EHandle target,
+					EHandle owner, DecalTarget@ dt=null, bool delayFinished=false)
 {
 	if (!effect.valid)
 		return;
 		
-	if (effect.pev.spawnflags & FL_EFFECT_RICOCHET != 0)
+	if (dt is null)
 	{
-		DecalTarget dt = getProjectileDecalTarget(creator, 0);
-		custom_ricochet(pos, dt.tr.vecPlaneNormal, effect, creator, dt.ent);
+		@dt = @getProjectileDecalTarget(creator, Vector(0,0,0), 32);
 	}
+		
+	if (effect.delay > 0 and !delayFinished)
+	{
+		g_Scheduler.SetTimeout("custom_effect", effect.delay, pos, @effect, @creator, target, owner, @dt, true);
+		return;
+	}
+	
+	// velocity for explosion-type effects
+	Vector vel = delayFinished or creator is null ? Vector(0,0,0) : creator.pev.velocity;
+	bool inWater = g_EngineFuncs.PointContents(pos) == CONTENTS_WATER;
+	Vector dir = creator is null ? dt.tr.vecPlaneNormal : creator.pev.velocity.Normalize();	
+		
 	if (effect.pev.spawnflags & FL_EFFECT_EXPLOSION != 0)
 	{
-		DecalTarget dt = getProjectileDecalTarget(creator, 32);
-		custom_explosion(creator.pev.origin, creator.pev.velocity, effect, dt.pos, dt.ent);
+		Vector exp_pos = pos;
+		if (dt.ent !is null)
+			exp_pos = exp_pos + dt.tr.vecPlaneNormal*effect.explode_offset;
+		custom_explosion(exp_pos, vel, effect, dt.pos, dt.ent, owner, inWater);
+	}
+	if (effect.pev.spawnflags & FL_EFFECT_LIGHTS != 0)
+	{
+		int l_size = int(effect.explode_light_adv.x);
+		int l_life = int(effect.explode_light_adv.y);
+		int l_decay = int(effect.explode_light_adv.z);
+		if (l_size > 0 and l_life > 0)
+			te_dlight(pos, l_size, effect.explode_light_color, l_life, l_decay);
+			
+		int l_size2 = int(effect.explode_light_adv2.x);
+		int l_life2 = int(effect.explode_light_adv2.y);
+		int l_decay2 = int(effect.explode_light_adv2.z);
+		if (l_size2 > 0)
+			te_dlight(pos, l_size2, effect.explode_light_color2, l_life2, l_decay2);
 	}
 	if (effect.pev.spawnflags & FL_EFFECT_SPARKS != 0)
 	{
 		te_sparks(pos);
 	}
-	
-	// TODO: CHECK IF EXPLOSION SOUNDS WORK
-	//ambientSound(pos, effect.explode_snd, 40);
-	custom_effect_sound(effect, creator);
-}
-
-void custom_ricochet(Vector pos, Vector dir, weapon_custom_effect@ effect, CBaseEntity@ owner, CBaseEntity@ decalEnt)
-{
-	if (!effect.valid)
-		return;
-		
+	if (effect.pev.spawnflags & FL_EFFECT_RICOCHET != 0)
+	{
+		te_ricochet(pos, 0);
+	}
+	if (effect.pev.spawnflags & FL_EFFECT_TARBABY != 0)
+	{
+		te_tarexplosion(pos);
+	}
+	if (effect.pev.spawnflags & FL_EFFECT_TARBABY2 != 0)
+	{
+		te_explosion2(pos);
+	}
+	if (effect.pev.spawnflags & FL_EFFECT_BURST != 0)
+	{
+		te_particlebust(pos, effect.burst_radius, effect.burst_color, effect.burst_life);
+	}
+	if (effect.pev.spawnflags & FL_EFFECT_LAVA != 0)
+	{
+		te_lavasplash(pos);
+	}
+	if (effect.pev.spawnflags & FL_EFFECT_TELEPORT != 0)
+	{
+		te_teleport(pos);
+	}
+	if (effect.glow_spr.Length() > 0)
+	{
+		te_glowsprite(pos, effect.glow_spr, effect.glow_spr_life, effect.glow_spr_scale, effect.glow_spr_opacity);
+	}
+	if (effect.spray_count > 0 and effect.spray_sprite.Length() > 0)
+	{
+		te_spritespray(pos, dir, effect.spray_sprite, effect.spray_count, effect.spray_speed, effect.spray_rand);
+	}
+	if (effect.implode_count > 0)
+	{
+		te_implosion(pos, effect.implode_radius, effect.implode_count, effect.implode_life);
+	}
 	if (effect.rico_part_count > 0)
 	{
-		te_spritetrail(pos, pos + dir, effect.rico_part_spr, 
+		te_spritetrail(pos, pos + dt.tr.vecPlaneNormal, effect.rico_part_spr, 
 					   effect.rico_part_count, 0, effect.rico_part_scale, 
-					   effect.rico_part_speed/2, effect.rico_part_speed);
+					   effect.rico_part_speed, effect.rico_part_speed/2);
 	}
 	if (effect.rico_trace_count > 0)
 	{
-		te_streaksplash(pos, dir, effect.rico_trace_color,
-						effect.rico_trace_count, effect.rico_trace_speed/2, effect.rico_trace_speed);
+		te_streaksplash(pos, dt.tr.vecPlaneNormal, effect.rico_trace_color,
+						effect.rico_trace_count, effect.rico_trace_rand, effect.rico_trace_speed);
 	}
 	if (effect.rico_decal != DECAL_NONE)
 	{
-		te_decal(pos, decalEnt, getBulletDecalOverride(decalEnt, getDecal(effect.rico_decal)));
+		string decal = getBulletDecalOverride(dt.ent, getDecal(effect.rico_decal));
+		if (effect.pev.spawnflags & FL_EFFECT_GUNSHOT_RICOCHET != 0)
+			te_gunshotdecal(pos, dt.ent, decal);
+		else
+			te_decal(pos, dt.ent, decal);
 	}
 	
+	if (effect.explode_gibs > 0 and effect.explode_gib_mdl.Length() > 0)
+	{		
+		te_breakmodel(pos, Vector(2,2,2), dir*effect.explode_gib_speed, effect.explode_gib_rand, 
+					  effect.explode_gib_mdl, effect.explode_gibs, 5, effect.explode_gib_mat | effect.explode_gib_effects);
+	}
+	if (effect.explode_bubbles > 0 and (inWater or effect.pev.spawnflags & FL_EFFECT_BUBBLES_IN_AIR != 0))
+	{
+		Vector mins = pos + effect.explode_bubble_mins;
+		Vector maxs = pos + effect.explode_bubble_maxs;
+		float height = (maxs.z - mins.z)*2.0f;
+		if (inWater)
+			height = g_Utility.WaterLevel(pos, pos.z, pos.z + 1024) - mins.z;
+		string spr = effect.explode_bubble_spr;
+		if (spr.Length() == 0)
+			spr = "sprites/bubble.spr";
+		int count = effect.explode_bubbles;
+		float speed = effect.explode_bubble_speed;
+		g_Scheduler.SetTimeout("delayed_bubbles", effect.explode_bubble_delay, mins, maxs, height, spr, count, speed);
+	}
+	
+	WeaponSound@ rico_snd = effect.getRandomSound();
+	if (rico_snd !is null)
+		rico_snd.play(pos, CHAN_STATIC);
+	
+	/*
+	int poisionCount = int(effect.poison_time / effect.poison_delay);
+	if (effect.poison_damage > 0 and poisionCount > 0)
+	{
+		float dmg = effect.poison_damage;
+		g_Scheduler.SetInterval("poisonDamage", effect.poison_delay, poisionCount, target, owner, dmg);
+	}
+	*/
+	if (effect.next_effect !is null)
+		custom_effect(pos, effect.next_effect, creator, target, owner, dt, false);
 }
 
-void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vector decalPos, CBaseEntity@ decalEnt)
+void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vector decalPos, 
+					  CBaseEntity@ decalEnt, EHandle owner, bool inWater)
 {
 	if (!effect.valid)
 		return;
 		
-	int scale = Math.max(1, Math.min(255, int(effect.explode_mag/10)));
-	int dscale = Math.max(8, Math.min(255, int(effect.explode_mag/20)));
-	int smokeScale = Math.min(255, scale+10);
-	float smokeDelay = 0.2;
+	int smokeScale = int(effect.explode_smoke_spr_scale * 10.0f);
+	int expScale = int(effect.explode_spr_scale * 10.0f);
+	int expFps = int(effect.explode_spr_fps);
+	string expSprite = inWater ? effect.explode_water_spr : effect.explode_spr;
 	int life = 8;
-	switch(effect.explosion_style)
+	
+	if (expSprite.Length() > 0)
 	{
-		case EXPLODE_SPRITE:
+		switch(effect.explosion_style)
 		{
-			int flags = 2 | 4;
-			te_explosion(pos, effect.explode_spr, scale, 30, flags);
-			smokeDelay = 0.4;
-			break;
+			case EXPLODE_SPRITE_PARTICLES:
+			case EXPLODE_SPRITE:
+			{					
+				int flags = 2 | 4; // no sound or lights
+				if (effect.explosion_style == EXPLODE_SPRITE)
+					flags |= 8; // no particles
+				te_explosion(pos, expSprite, expScale, expFps, flags);
+				break;
+			}
+			case EXPLODE_DISK:
+				te_beamdisk(pos, effect.explode_beam_radius, expSprite, 
+								effect.explode_beam_frame, effect.explode_beam_fps, 
+								effect.explode_beam_life, effect.explode_beam_width, 
+								effect.explode_beam_noise, effect.explode_beam_color,
+								effect.explode_beam_scroll);
+				break;
+			case EXPLODE_CYLINDER:
+				te_beamcylinder(pos, effect.explode_beam_radius, expSprite, 
+								effect.explode_beam_frame, effect.explode_beam_fps, 
+								effect.explode_beam_life, effect.explode_beam_width, 
+								effect.explode_beam_noise, effect.explode_beam_color,
+								effect.explode_beam_scroll);
+				break;
+			case EXPLODE_TORUS:
+				te_beamtorus(pos, effect.explode_beam_radius, expSprite, 
+								effect.explode_beam_frame, effect.explode_beam_fps, 
+								effect.explode_beam_life, effect.explode_beam_width, 
+								effect.explode_beam_noise, effect.explode_beam_color,
+								effect.explode_beam_scroll);
+				break;
 		}
-		case EXPLODE_DISK:
-			te_beamdisk(pos, effect.explode_mag, effect.explode_spr, 0, 15, life, 255, 0, WHITE, 0);
-			break;
-		case EXPLODE_CYLINDER:
-			te_beamcylinder(pos, effect.explode_mag, effect.explode_spr, 0, 15, life, scale, 0, WHITE, 0);
-			break;
-		case EXPLODE_TORUS:
-			te_beamtorus(pos, effect.explode_mag, effect.explode_spr, 0, 15, life, scale, 0, WHITE, 0);
-			break;
+	}
+	
+	if (effect.explode_radius > 0 and effect.explode_damage > 0 and owner)
+	{
+		CBaseEntity@ ownerEnt = owner;
+		float radius = effect.explode_radius;
+		float dmg = effect.explode_damage;
+		g_WeaponFuncs.RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
 	}
 	
 	if (effect.explode_smoke_spr.Length() > 0)
-		g_Scheduler.SetTimeout("delayed_smoke", smokeDelay, pos, effect.explode_smoke_spr, smokeScale);
-	if (effect.explode_light.a > 0)
-		te_dlight(pos, dscale, effect.explode_light, 255, 50);
+		g_Scheduler.SetTimeout("delayed_smoke", effect.explode_smoke_delay, pos, 
+								effect.explode_smoke_spr, smokeScale);
+}
+
+void animate_view_angles(EHandle h_plr, Vector start_angle, Vector add_angle, float startTime, float endTime)
+{
+	if (!h_plr)
+		return;
 		
-	if (effect.explode_gibs > 0)
+	CBaseEntity@ plr = h_plr;
+	if (plr is null)
+		return;
+		
+	float progress = (g_Engine.time - startTime) / (endTime - startTime);
+	if (progress > 1)
+		progress = 1;
+		
+	plr.pev.angles.x = (add_angle.x != 0) ? start_angle.x + add_angle.x*progress : plr.pev.v_angle.x;
+	plr.pev.angles.y = (add_angle.y != 0) ? start_angle.y + add_angle.y*progress : plr.pev.v_angle.y;
+	plr.pev.angles.z = (add_angle.z != 0) ? start_angle.z + add_angle.z*progress : plr.pev.v_angle.z;
+	plr.pev.fixangle = FAM_FORCEVIEWANGLES;
+	
+	if (progress < 1)
+		g_Scheduler.SetTimeout("animate_view_angles", 0, h_plr, start_angle, add_angle, startTime, endTime);
+}
+
+void player_sprites_effect(EHandle h_plr, string spr, int count)
+{
+	if (!h_plr)
+		return;
+		
+	CBaseEntity@ ent = h_plr;
+	if (ent is null or !ent.IsPlayer())
+		return;
+		
+	CBasePlayer@ plr = cast<CBasePlayer@>(ent);
+		
+	te_playersprites(plr, spr, count);
+}
+
+void player_revert_glow(EHandle h_plr, Vector oldGlow, float oldGlowAmt, bool useOldGlow)
+{
+	if (!h_plr)
+		return;
+		
+	CBaseEntity@ ent = h_plr;
+	if (ent is null or !ent.IsPlayer())
+		return;
+		
+	if (useOldGlow)
 	{
-		te_breakmodel(pos, Vector(2,2,2), vel, smokeScale, 
-					  effect.explode_gib_mdl, effect.explode_gibs, 5, effect.explode_gib_mat | 16);
+		ent.pev.renderamt = oldGlowAmt;
+		ent.pev.rendercolor = oldGlow;
+	}
+	else
+		ent.pev.renderfx = 0;
+}
+
+// returns animation to be played by weapon
+void custom_user_effect(CBasePlayer@ plr, weapon_custom_user_effect@ effect)
+{
+	if (effect is null)
+		return;
+		
+	EHandle h_plr = plr;
+	
+	WeaponSound@ snd = effect.getRandomSound();
+	if (snd !is null)
+	{
+		bool userOnly = effect.pev.spawnflags & FL_UEFFECT_USER_SOUNDS != 0;
+		snd.play(plr, CHAN_STATIC, 1, -1, 0, userOnly);
+	}
+	
+	// damage 'em
+	if (effect.self_damage != 0)
+	{
+		Vector oldVel = plr.pev.velocity;
+		plr.TakeDamage(plr.pev, plr.pev, effect.self_damage, effect.damageType());
+		
+		// Idk why this even happens. No matter what the damage type is you get launched into the air
+		plr.pev.velocity = oldVel;
+	}
+		
+	// punch 'em
+	plr.pev.punchangle = effect.punch_angle;
+	
+	// push 'em
+	Math.MakeVectors( plr.pev.v_angle );
+	Vector push = effect.push_vel;
+	plr.pev.velocity = plr.pev.velocity + g_Engine.v_right*push.x + Vector(0,0,1)*push.y + g_Engine.v_forward*push.z;
+
+	// rotate 'em
+	if (effect.add_angle.x != 0 and effect.add_angle.y !=0 and effect.add_angle.z != 0)
+	{
+		float startTime = g_Engine.time;
+		float endTime = startTime + effect.add_angle_time;
+		g_Scheduler.SetTimeout("animate_view_angles", 0, h_plr, plr.pev.v_angle, effect.add_angle, startTime, endTime);
+	}
+	
+	// indicate something
+	if (effect.action_sprite.Length() > 0)
+		plr.ShowOverheadSprite(effect.action_sprite, effect.action_sprite_height, effect.action_sprite_time);
+	
+	// thirdperson anim
+	if (effect.anim != -1)
+	{
+		plr.m_Activity = ACT_RELOAD;
+		plr.pev.sequence = effect.anim;
+		plr.pev.frame = effect.anim_frame;
+		plr.ResetSequenceInfo();
+		plr.pev.framerate = effect.anim_speed;
 	}
 
-	if (effect.explode_decal != DECAL_NONE)
+	if (effect.fade_mode != -1)
 	{
-		// search is distance > 0 because it's unlikely that a projectile will be 
-		// touching a surface when its life expires.
-		te_decal(decalPos, decalEnt, getDecal(effect.explode_decal));
+		g_PlayerFuncs.ScreenFade(plr, effect.fade_color.getRGB(), effect.fade_time, 
+								 effect.fade_hold, effect.fade_color.a, effect.fade_mode);
+	}
+	
+	//if (effect.pev.spawnflags & 
+	//plr.EnableControl(false);
+	//plr.pev.flags ^= 4096;
+	
+	if (effect.player_sprite_count > 0 and effect.player_sprite.Length() > 0)
+	{
+		int numIntervals = int(effect.player_sprite_time / effect.player_sprite_freq);
+		
+		player_sprites_effect(h_plr, effect.player_sprite, effect.player_sprite_count);
+		g_Scheduler.SetInterval("player_sprites_effect", effect.player_sprite_freq, numIntervals, 
+								h_plr, effect.player_sprite, effect.player_sprite_count);
+	}
+	
+	if (effect.glow_time > 0)
+	{
+		// Remember old glow setting in case user is normally glowing due to map logic or server script
+		Vector oldGlow = plr.pev.rendercolor;
+		float oldGlowAmt = plr.pev.renderamt;
+		bool isGlowing = plr.pev.renderfx == 19;
+		
+		plr.pev.renderfx = 19;
+		plr.pev.renderamt = effect.glow_amt;
+		plr.pev.rendercolor = effect.glow_color;
+		
+		g_Scheduler.SetTimeout("player_revert_glow", effect.glow_time, h_plr, oldGlow, oldGlowAmt, isGlowing);
 	}
 }
 
@@ -816,13 +1131,21 @@ void delayed_smoke(Vector origin, string sprite, int scale)
 	te_smoke(origin, sprite, scale);
 }
 
+void delayed_bubbles(Vector mins, Vector maxs, float height, string spr, int count, float speed)
+{
+	te_bubbles(mins, maxs, height, spr, count, speed);
+}
+
 void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ shoot_opts)
 {
 	ProjectileOptions@ options = shoot_opts.projectile;
 	if (projectile)
 	{
 		CBaseEntity@ ent = projectile;
-		custom_effect(ent.pev.origin, shoot_opts.effect3, ent);
+		CBaseEntity@ owner = g_EntityFuncs.Instance( ent.pev.owner );
+		EHandle howner = owner;
+		EHandle target;
+		custom_effect(ent.pev.origin, shoot_opts.effect3, ent, target, howner);
 		g_EntityFuncs.Remove(ent);
 	}
 	if (sprite)
@@ -837,24 +1160,55 @@ void removeWeapon(CBasePlayerWeapon@ wep)
 	wep.Killed(wep.pev, 0);
 }
 
+void WaterSoundEffects(Vector pos, SoundArgs@ args)
+{
+	if (!args.underwaterEffects)
+		return;
+	if (g_EngineFuncs.PointContents(pos) == CONTENTS_WATER)
+	{
+		args.pitch = Math.max(0, args.pitch - Math.RandomLong(20, 30));
+		args.volume *= 0.7f;
+	}
+}
+
 void playSoundDelay(SoundArgs@ args)
 {
-	if (!args.ent)
-		return;
+	if (args.attachToEnt)
+	{
+		if (!args.ent)
+			return;
+		CBaseEntity@ ent = args.ent;
 
-	CBaseEntity@ ent = args.ent;
-	g_SoundSystem.EmitSoundDyn( ent.edict(), args.channel, args.file, args.volume, args.attn, args.flags, args.pitch );
+		WaterSoundEffects(ent.pev.origin + ent.pev.view_ofs, @args);
+		
+		g_SoundSystem.EmitSoundDyn( ent.edict(), args.channel, args.file, args.volume, args.attn, args.flags, 
+									args.pitch, args.target_ent );
+	}
+	else
+	{
+		WaterSoundEffects(args.pos, @args);
+		g_SoundSystem.PlaySound( null, args.channel, args.file, args.volume, 
+								args.attn, args.flags, args.pitch, args.target_ent, true, args.pos );
+	}
+	
 }
 
 class SoundArgs
 {
+	bool valid = false;
+	bool attachToEnt = true;
+	Vector pos;
 	EHandle ent;
-	SOUND_CHANNEL channel;
+	int target_ent=0; // target_ent_unreliable param
+	SOUND_CHANNEL channel = CHAN_STATIC;
 	string file;
-	float volume;
-	float attn;
-	int flags;
-	int pitch;
+	float volume = 1.0f;
+	float attn = ATTN_NORM;
+	int flags = 0;
+	int pitch = 100;
+	float delay = 0;
+	WeaponSound@ next_snd;
+	bool underwaterEffects = true;
 }
 
 class WeaponSound
@@ -862,27 +1216,35 @@ class WeaponSound
 	string file;
 	weapon_custom_sound@ options;
 
-	bool play(CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC, float volMult=1.0f, int pitchOverride=-1, 
-			  int additionalFlags=0)
+	SoundArgs getSoundArgs(Vector pos, CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC, float volMult=1.0f, 
+							int pitchOverride=-1, int additionalFlags=0, bool attachToEnt=false, bool userOnly=false)
 	{
 		if (file.Length() == 0)
-			return false;
+			return SoundArgs();
 		float volume = 1.0f;
 		float attn = ATTN_NORM;
 		int flags = additionalFlags;
 		int pitch = getPitch();
 		float delay = 0.0f;
+		SOUND_CHANNEL chan = channel;
+		WeaponSound@ nextSnd;
+		bool underwaterEffects = true;
 		if (options !is null)
 		{
+			@nextSnd = @options.next_snd;
+			underwaterEffects = options.pev.spawnflags & FL_SOUND_NO_WATER_EFFECT == 0;
 			delay = options.pev.friction;
 			volume = options.pev.health / 100.0f;
+			if (options.pev.sequence > -1)
+				chan = SOUND_CHANNEL(options.pev.sequence);
 			
 			switch(options.pev.body)
 			{
 				case 1: attn = ATTN_IDLE; break;
 				case 2: attn = ATTN_STATIC; break;
 				case 3: attn = ATTN_NORM; break;
-				case 4: attn = ATTN_NONE; break;
+				case 4: attn = 0.3f; break;
+				case 5: attn = ATTN_NONE; break;
 			}
 			
 			if (options.pev.skin == 2)
@@ -893,21 +1255,69 @@ class WeaponSound
 		if (pitchOverride != -1)
 			pitch = pitchOverride;
 		
-		if (delay > 0)
-		{
-			SoundArgs args;
-			args.ent = ent;
-			args.channel = channel;
-			args.file = file;
-			args.volume = volume*volMult;
-			args.attn = attn;
-			args.flags = flags;
-			args.pitch = pitch;
-			
-			g_Scheduler.SetTimeout("playSoundDelay", delay, @args);
-		}
+		
+		SoundArgs args;
+		args.valid = true;
+		args.attachToEnt = attachToEnt;
+		args.pos = pos;
+		args.delay = delay;
+		args.ent = ent;
+		args.channel = chan;
+		args.file = file;
+		args.volume = volume*volMult;
+		args.attn = attn;
+		args.flags = flags;
+		args.pitch = pitch;
+		args.target_ent = (ent !is null and userOnly) ? ent.entindex() : 0;
+		args.underwaterEffects = underwaterEffects;
+		@args.next_snd = @nextSnd;
+		
+		return args;
+	}
+	
+	bool play(CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC, float volMult=1.0f, int pitchOverride=-1, 
+			  int additionalFlags=0, bool userOnly=false)
+	{
+		SoundArgs args = getSoundArgs(Vector(0,0,0), ent, channel, volMult, pitchOverride, additionalFlags, 
+									  true, userOnly);
+		if (!args.valid)
+			return false;
+		
+		//println("PLAY: " + args.file);
+		if (args.delay > 0)		
+			g_Scheduler.SetTimeout("playSoundDelay", args.delay, @args);
 		else
-			g_SoundSystem.EmitSoundDyn( ent.edict(), channel, file, volume*volMult, attn, flags, pitch );
+		{
+			WaterSoundEffects(ent.pev.origin + ent.pev.view_ofs, @args);
+			g_SoundSystem.EmitSoundDyn( ent.edict(), args.channel, args.file, args.volume, 
+									args.attn, args.flags, args.pitch, args.target_ent );
+		}
+		
+		if (args.next_snd !is null)
+			args.next_snd.play(ent, channel, volMult, pitchOverride, additionalFlags, userOnly);
+		
+		return true;
+	}
+	
+	bool play(Vector pos, SOUND_CHANNEL channel=CHAN_STATIC, float volMult=1.0f, int pitchOverride=-1, 
+			  int additionalFlags=0)
+	{
+		SoundArgs args = getSoundArgs(pos, null, channel, volMult, pitchOverride, additionalFlags, false);
+		if (!args.valid)
+			return false;
+			
+		if (args.delay > 0)		
+			g_Scheduler.SetTimeout("playSoundDelay", args.delay, @args);
+		else
+		{
+			WaterSoundEffects(args.pos, @args);
+			g_SoundSystem.PlaySound( null, args.channel, args.file, args.volume, 
+										args.attn, args.flags, args.pitch, args.target_ent, true, pos );
+		}
+		
+		if (args.next_snd !is null)
+			args.next_snd.play(pos, channel, volMult, pitchOverride, additionalFlags);
+		
 		return true;
 	}
 	
@@ -932,6 +1342,8 @@ class WeaponSound
 	
 	void stop(CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC)
 	{
+		if (options !is null and options.pev.sequence > -1)
+			channel = SOUND_CHANNEL(options.pev.sequence);
 		g_SoundSystem.StopSound(ent.edict(), channel, file);
 	}
 }
@@ -1132,7 +1544,6 @@ bool shouldHealTarget(CBaseEntity@ target, CBaseEntity@ plr, weapon_custom_shoot
 	
 	if ((isFriendly and healFriend) or (!isFriendly and healFoe))
 	{
-		
 		if (healAll) return true;
 		if (target.IsMachine() and healMachines) return true;
 		if (isHuman(target) and healHumans) return true;
@@ -1194,7 +1605,7 @@ float heal(CBaseEntity@ target, weapon_custom_shoot@ opts, float amt)
 float revive(CBaseEntity@ target, weapon_custom_shoot@ opts)
 {
 	target.EndRevive(0);
-	target.pev.health = target.pev.max_health * (opts.bullet_damage/100.0f);
+	target.pev.health = target.pev.max_health * (opts.damage/100.0f);
 	return target.pev.health;
 }
 
@@ -1217,6 +1628,118 @@ CBaseEntity@ getReviveTarget(Vector center, float radius, CBasePlayer@ plr, weap
 	return null;
 }
 
+// force projectile to follow player's crosshairs
+void projectile_follow_aim(EHandle h_plr, EHandle h_proj, weapon_custom_shoot@ opts, float timeLeft)
+{
+	if (!h_plr or !h_proj)
+		return;
+	
+	CBaseEntity@ plrEnt = h_plr;
+	CBasePlayer@ plr = cast<CBasePlayer@>(@plrEnt);
+	CBaseEntity@ proj = h_proj;
+	
+	if (plr is null or proj is null)
+		return;
+		
+	// TO_BE_SCARED_OF: Can this cause a race condition (other code using engine vectors at the same time)?
+	Vector vecSrc = plr.GetGunPosition();
+	Math.MakeVectors( plr.pev.v_angle );
+	
+	// get crosshair target location
+	TraceResult tr;
+	Vector vecEnd = vecSrc + g_Engine.v_forward * 65536;
+	g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, proj.edict(), tr );
+	
+	Vector dir = proj.pev.velocity.Normalize();
+	
+	Vector targetDir;
+	if (opts.projectile.follow_mode == FOLLOW_CROSSHAIRS)
+	{
+		targetDir = (tr.vecEndPos - proj.pev.origin).Normalize();
+	}
+	else if (opts.projectile.follow_mode == FOLLOW_ENEMIES)
+	{
+		CBaseEntity@ enemy = g_EntityFuncs.Instance( proj.pev.enemy );
+		CBaseEntity@ ent = null;
+		float bestDot = 0;
+		float bestRange = 9999999.0f;
+		float radius = opts.projectile.follow_radius;
+		if (radius <= 0)
+			radius = 9999999;
+			
+		// find closest enemy (TODO: give low dot products a weight to prefer not turning a lot)
+		if (enemy is null)
+		{
+			do {
+				@ent = g_EntityFuncs.FindEntityInSphere(ent, proj.pev.origin, radius, "*", "classname"); 
+				if (ent !is null and ent.IsMonster() and ent.IsAlive())
+				{
+					if (ent.entindex() == plr.entindex())
+						continue;
+					if (ent.pev.classname == "squadmaker")
+						continue;
+					int rel = plr.IRelationship(ent);
+					bool isFriendly = rel == R_AL or rel == R_NO;
+	
+					if (!isFriendly or true)
+					{
+						float dist = (ent.pev.origin - proj.pev.origin).Length();
+						if (dist < bestRange)
+						{
+							bestRange = dist;
+							@proj.pev.enemy = ent.edict();
+						}
+					}
+				}
+			} while (ent !is null);
+			
+			@enemy = g_EntityFuncs.Instance( proj.pev.enemy );
+		}
+		
+		if (enemy !is null)
+			targetDir = (enemy.BodyTarget(enemy.pev.origin) - proj.pev.origin).Normalize();
+		else
+			targetDir = dir;
+	}
+	
+	float speed = proj.pev.velocity.Length();	
+	
+	Vector axis = CrossProduct(dir, targetDir).Normalize();
+	
+	float dot = DotProduct(targetDir, dir);
+	float angle = -acos(dot);
+	if (dot == -1)
+		angle = Math.PI / 2.0f;
+	if (dot == 1 or angle != angle)
+		angle = 0;
+	float maxAngle = opts.projectile.follow_angle * Math.PI / 180.0f;
+	angle = Math.max(-maxAngle, Math.min(maxAngle, angle));
+	
+	if (abs(angle) > 0.001f)
+	{
+		// Apply rotation around arbitrary axis
+		array<float> rotMat = rotationMatrix(axis, angle);
+		dir = matMultVector(rotMat, dir).Normalize();
+		proj.pev.velocity = dir*speed;
+		g_EngineFuncs.VecToAngles(proj.pev.velocity, proj.pev.angles);	
+	}
+	
+	
+	bool oneMoreTime = false;
+	if (timeLeft > 0)
+	{
+		timeLeft -= 0.05;
+		if (timeLeft <= 0)
+		{
+			oneMoreTime = true;
+			timeLeft = -1;
+		}
+	}
+	
+	if (timeLeft >= 0 or oneMoreTime)
+		g_Scheduler.SetTimeout("projectile_follow_aim", opts.projectile.follow_time.z, h_plr, h_proj, @opts, timeLeft);
+}
+
 // breakable glass uses a special decal when shot
 string getBulletDecalOverride(CBaseEntity@ ent, string currentDecal)
 {
@@ -1234,28 +1757,64 @@ string getBulletDecalOverride(CBaseEntity@ ent, string currentDecal)
 
 void loadSoundSettings(WeaponSound@ snd)
 {
+	if (snd !is null and snd.options !is null)
+		return;
+		
 	CBaseEntity@ ent = g_EntityFuncs.FindEntityByTargetname(null, snd.file);
 	if (ent !is null)
 	{
 		snd.file = ent.pev.message;
 		@snd.options = cast<weapon_custom_sound@>(CastToScriptClass(ent));
+		snd.options.loadExternalSoundSettings();
 	}
 }
 
-weapon_custom_effect@ loadEffectSettings(weapon_custom_effect@ effect)
+weapon_custom_effect@ loadEffectSettings(weapon_custom_effect@ effect, string name="")
 {
-	CBaseEntity@ ent = g_EntityFuncs.FindEntityByTargetname(null, effect.name);
+	if (effect !is null and effect.valid)
+		return @effect;
+		
+	string searchStr = effect !is null ? effect.name : name;
+	CBaseEntity@ ent = g_EntityFuncs.FindEntityByTargetname(null, searchStr);
 	if (ent !is null)
 	{
 		weapon_custom_effect@ ef = cast<weapon_custom_effect@>(CastToScriptClass(ent));
 		ef.loadExternalSoundSettings();
 		ef.valid = true;
-		ef.name = effect.name;
+		ef.name = searchStr;
+		
+		@effect = @ef;
+		
+		ef.loadExternalEffectSettings(); // load chained effects
 		return @ef;
 	} 
-	else if (string(effect.name).Length() > 0) 
+	else if (string(searchStr).Length() > 0) 
 	{
 		println("WEAPON_CUSTOM ERROR: Failed to find weapon_custom_effect " + effect.name);
+	}
+	return @effect;
+}
+
+weapon_custom_user_effect@ loadUserEffectSettings(weapon_custom_user_effect@ effect, string name="")
+{
+	if (effect !is null and effect.valid)
+		return @effect;
+		
+	CBaseEntity@ ent = g_EntityFuncs.FindEntityByTargetname(null, name);
+	if (ent !is null)
+	{
+		weapon_custom_user_effect@ ef = cast<weapon_custom_user_effect@>(CastToScriptClass(ent));
+		ef.loadExternalSoundSettings();
+		ef.valid = true;
+		
+		@effect = @ef;
+		
+		ef.loadExternalUserEffectSettings(); // load chained effects
+		return @ef;
+	} 
+	else if (string(name).Length() > 0) 
+	{
+		println("WEAPON_CUSTOM ERROR: Failed to find weapon_custom_user_effect " + name);
 	}
 	return @effect;
 }
@@ -1288,3 +1847,13 @@ void te_beampoints(Vector start, Vector end, string sprite="sprites/laserbeam.sp
 void _te_pointeffect(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null, int effect=TE_SPARKS) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(effect);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.End(); }
 void te_sparks(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { _te_pointeffect(pos, msgType, dest, TE_SPARKS); }
 void te_bubbletrail(Vector start, Vector end, string sprite="sprites/bubble.spr", float height=128.0f, uint8 count=16, float speed=16.0f, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_BUBBLETRAIL);m.WriteCoord(start.x);m.WriteCoord(start.y);m.WriteCoord(start.z);m.WriteCoord(end.x);m.WriteCoord(end.y);m.WriteCoord(end.z);m.WriteCoord(height);m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteCoord(speed);m.End(); }
+void te_bubbles(Vector mins, Vector maxs, float height=256.0f, string sprite="sprites/bubble.spr", uint8 count=64, float speed=16.0f, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_BUBBLES);m.WriteCoord(mins.x);m.WriteCoord(mins.y);m.WriteCoord(mins.z);m.WriteCoord(maxs.x);m.WriteCoord(maxs.y);m.WriteCoord(maxs.z);m.WriteCoord(height);m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteCoord(speed);m.End(); }
+void te_spritespray(Vector pos, Vector velocity, string sprite="sprites/bubble.spr", uint8 count=8, uint8 speed=16, uint8 noise=255, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_SPRITE_SPRAY);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteCoord(velocity.x);m.WriteCoord(velocity.y);m.WriteCoord(velocity.z);m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteByte(speed);m.WriteByte(noise);m.End(); }
+void te_ricochet(Vector pos, uint8 scale=10, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_ARMOR_RICOCHET);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteByte(scale);m.End(); }
+void te_tarexplosion(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {_te_pointeffect(pos, msgType, dest, TE_TAREXPLOSION);}
+void te_explosion2(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_EXPLOSION2);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteByte(0);m.WriteByte(127);m.End();}
+void te_particlebust(Vector pos, uint16 radius=128, uint8 color=250, uint8 life=5, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_PARTICLEBURST);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteShort(radius);m.WriteByte(color);m.WriteByte(life);m.End();}
+void te_lavasplash(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { _te_pointeffect(pos, msgType, dest, TE_LAVASPLASH); }
+void te_teleport(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {_te_pointeffect(pos, msgType, dest, TE_TELEPORT);}
+void te_implosion(Vector pos, uint8 radius=255, uint8 count=32, uint8 life=5, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null){NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_IMPLOSION);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteByte(radius);m.WriteByte(count);m.WriteByte(life);m.End();}
+void te_playersprites(CBasePlayer@ target, string sprite="sprites/bubble.spr", uint8 count=16, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_PLAYERSPRITES);m.WriteShort(target.entindex());m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteByte(0);m.End();}

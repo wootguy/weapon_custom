@@ -8,10 +8,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	int lastSequence;
 	weapon_custom@ settings;
 	
-	array< array<CBeam@> > beams = {{null}, {null}};
-	array<CSprite@> beamHits; // beam impact sprites
+	array< array<EHandle> > beams = {{null}, {null}}; // CBeam handles
+	array<EHandle> beamHits; // beam impact sprites (CSprite handles)
 	float beamStartTime = 0;
 	float minBeamTime = 0;
+	float nextBeamAttack = 0; // constant beam attack delay
 	
 	float lastBeamDamage = 0;
 	bool first_beam_shoot = false;
@@ -34,10 +35,13 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	bool windingDown = false;
 	bool windupHeld = false;
 	bool windupFinished = false;
+	bool windupLoopEntered = false;
+	bool windupOvercharged = false;
 	float windupStart = 0;
 	float lastWindupInc = 0;
 	float nextWindupShoot = 0;
 	float windupMultiplier = 1.0f;
+	float windupKickbackMultiplier = 1.0f;
 	int windupAmmoUsed = 0;
 	
 	float lastPrimaryRegen = 0;
@@ -47,17 +51,21 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	float nextActionTime = 0;
 	float unhideLaserTime = 0;
 	float ejectShellTime = 0;
+	float nextCooldownSound = 0;
 	float nextReload = 0;
 	float nextReloadEnd = 0;
 	bool needShellEject = false;
 	int reloading = 0; // continous reload state
+	
+	WeaponSound@ lastCooldownSnd;
+	WeaponSound@ lastShootSnd;
 	
 	int active_fire = -1;
 	int active_ammo_type = -1;
 	weapon_custom_shoot@ active_opts; // active shoot opts
 	
 	EHandle hook_ent;
-	CBeam@ hook_beam;
+	EHandle hook_beam;
 	bool shootingHook = false;
 	bool hookAnimStarted = false;
 	float hookAnimStartTime = 0;
@@ -67,6 +75,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	EHandle laser_spr;
 	
 	int shootCount = 0;
+	int liveProjectiles = 0;
 	
 	void Spawn()
 	{
@@ -154,12 +163,17 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		return false;
 	}
 	
-	bool PlayEmptySound()
+	bool PlayEmptySound(weapon_custom_shoot@ opts)
 	{
 		if( self.m_bPlayEmptySound or true )
 		{
 			self.m_bPlayEmptySound = false;
-			settings.primary_empty_snd.play(self.m_pPlayer, CHAN_WEAPON);
+			if (opts.isPrimary())
+				settings.primary_empty_snd.play(self.m_pPlayer, CHAN_WEAPON);
+			else if (opts.isSecondary())
+				settings.secondary_empty_snd.play(self.m_pPlayer, CHAN_WEAPON);
+			else
+				settings.tertiary_empty_snd.play(self.m_pPlayer, CHAN_WEAPON);
 		}
 		
 		return false;
@@ -252,48 +266,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				{
 					WeaponSound@ snd = active_opts.getRandomMeleeHitSound();
 					if (snd !is null)
-						snd.play(self.m_pPlayer, CHAN_STATIC);
+						snd.play(self.m_pPlayer, CHAN_VOICE);
 				}
 			}
 		}
 		
-		// bubble trails
-		bool startInWater = g_EngineFuncs.PointContents(vecSrc) == CONTENTS_WATER;
-		bool endInWater = g_EngineFuncs.PointContents(tr.vecEndPos) == CONTENTS_WATER;
-		if (startInWater or endInWater)
-		{
-			Vector bubbleStart = vecSrc;
-			Vector bubbleEnd = tr.vecEndPos;
-			Vector bubbleDir = bubbleEnd - bubbleStart;
-			float waterLevel;
-			
-			// find water level relative to trace start
-			Vector waterPos = startInWater ? bubbleStart : bubbleEnd;
-			waterLevel = g_Utility.WaterLevel(waterPos, waterPos.z, waterPos.z + 1024);
-			waterLevel -= bubbleStart.z;
-			
-			// get percentage of distance travelled through water
-			float waterDist = 1.0f; 
-			if (!startInWater or !endInWater)
-				waterDist -= waterLevel / (bubbleEnd.z - bubbleStart.z);
-			if (!endInWater)
-				waterDist = 1.0f - waterDist;
-			
-			// clip trace to just the water portion
-			if (!startInWater)
-				bubbleStart = bubbleEnd - bubbleDir*waterDist;
-			else if (!endInWater)
-				bubbleEnd = bubbleStart + bubbleDir*waterDist;
-				
-			if (!startInWater or !endInWater)
-				waterLevel = bubbleStart.z > bubbleEnd.z ? 0 : bubbleEnd.z - bubbleStart.z;
-				
-			// calculate bubbles needed for an even distribution
-			int numBubbles = int( (bubbleEnd - bubbleStart).Length() / 128.0f );
-			numBubbles = Math.max(1, Math.min(255, numBubbles));
-			
-			te_bubbletrail(bubbleStart, bubbleEnd, "sprites/bubble.spr", waterLevel, numBubbles, 16.0f);
-		}
+		water_bullet_effects(vecSrc, tr.vecEndPos);
 		
 		// do more fancy effects
 		if( tr.flFraction < 1.0 )
@@ -303,44 +281,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				CBaseEntity@ pHit = g_EntityFuncs.Instance( tr.pHit );
 				
 				if( pHit !is null ) 
-				{
-					int dmgType = DMG_BULLET | DMG_NEVERGIB;
-					if (active_opts.shoot_type == SHOOT_MELEE)
-						dmgType = DMG_CLUB;
-					
-					// damage done before hitgroup multipliers
-					float attackDamage = active_opts.bullet_damage*windupMultiplier*partialAmmoModifier;
-					float baseDamage = applyDamageModifiers(attackDamage, pHit, self.m_pPlayer, active_opts);
-					
-					if (baseDamage < 0)
-					{	
-						// avoid TraceAttack so scis don't think we're shooting at them
-						float healPoints = -heal(pHit, active_opts, -baseDamage);
-						if (healPoints == 0 and active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0)
-						{
-							abortAttack = !revivedSomething;
-							return;
-						}
-						if (active_opts.pev.spawnflags & FL_SHOOT_PARTIAL_AMMO_SHOOT != 0)
-						{
-							// don't use all ammo if we were only able to heal a small amount
-							if (healPoints < attackDamage and attackDamage > 0)
-							{
-								float ammoScale = healPoints / attackDamage;
-								partialAmmoUsage = int(ammoScale * active_opts.ammo_cost);
-							}
-						}	
-					}
-					else
+				{					
+					if (!AttackMonster(vecSrc, tr))
 					{
-						if (active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0)
-						{
-							abortAttack = !revivedSomething;
-							return;
-						}
-						g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
-						pHit.TraceAttack(self.m_pPlayer.pev, baseDamage, vecAiming, tr, dmgType);
-						g_WeaponFuncs.ApplyMultiDamage(pHit.pev, self.m_pPlayer.pev);
+						abortAttack = !revivedSomething;
+						return;
 					}
 					
 					string decal = getBulletDecalOverride(pHit, getDecal(active_opts.bullet_decal));
@@ -351,8 +296,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 							te_decal(tr.vecEndPos, pHit, decal);
 					}
 					
-					knockBack(pHit, vecAiming * active_opts.knockback);
-					
 					bool playDefaultMeleeSnd = active_opts.shoot_type == SHOOT_MELEE;
 					bool playDefaultMeleeSndQuietly = isBreakableEntity(pHit); // only SC does this
 					if (pHit.IsMonster() or pHit.IsPlayer())
@@ -362,7 +305,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 							// impact sound
 							WeaponSound@ snd = active_opts.getRandomMeleeFleshSound();
 							if (snd !is null)
-								snd.play(self.m_pPlayer, CHAN_STATIC);
+								snd.play(self.m_pPlayer, CHAN_VOICE);
 							playDefaultMeleeSnd = false;
 						}
 						else
@@ -374,7 +317,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 						float volume = playDefaultMeleeSndQuietly ? 0.5f : 1.0f;
 						WeaponSound@ snd = active_opts.getRandomMeleeHitSound();
 						if (snd !is null)
-							snd.play(self.m_pPlayer, CHAN_STATIC, volume);
+							snd.play(self.m_pPlayer, CHAN_VOICE, volume);
 					}
 				}
 			}
@@ -393,11 +336,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			if (meleeSkip and !shootingHook)
 			{
 				WeaponSound@ snd = active_opts.getRandomShootSound();
-				if (snd !is null)
-					snd.play(self.m_pPlayer, CHAN_WEAPON);
+				snd.play(self.m_pPlayer, CHAN_WEAPON);
 			}
 		}
 		
+		// bullet tracer effects
 		if (active_opts.bullet_color != -1)
 		{
 			if (active_opts.bullet_color == 4)
@@ -438,17 +381,15 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			ShootOneBullet();
 	}
 	
-	CBaseEntity@ ShootCustomProjectile(string classname)
+	CBaseEntity@ ShootCustomProjectile(string classname, Vector ori, Vector vel)
 	{
-		ProjectileOptions@ options = active_opts.projectile;
+		ProjectileOptions@ options = @active_opts.projectile;
 		
 		dictionary keys;
-		Vector boltOri = self.m_pPlayer.pev.origin + self.m_pPlayer.pev.view_ofs;
 		Vector boltAngles = self.m_pPlayer.pev.v_angle * Vector(-1, 1, 1);
-		Vector projectile_velocity = g_Engine.v_forward * options.speed;
-		keys["origin"] = boltOri.ToString();
+		keys["origin"] = ori.ToString();
 		keys["angles"] = boltAngles.ToString();
-		keys["velocity"] = projectile_velocity.ToString();
+		keys["velocity"] = vel.ToString();
 		
 		// replace model or use error.mdl if no model specified and not a standard entity
 		string model = options.model.Length() > 0 ? options.model : "models/error.mdl";
@@ -456,66 +397,40 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			keys["model"] = model;
 		if (options.type == PROJECTILE_WEAPON)
 			keys["model"] = settings.wpn_w_model;
-		if (options.model.Length() == 0)
+		if (options.type == PROJECTILE_CUSTOM and options.model.Length() == 0)
 			keys["rendermode"] = "1"; // don't render the model
 			
 		CBaseEntity@ shootEnt = g_EntityFuncs.CreateEntity(classname, keys, false);	
-		WeaponCustomProjectile@ shootEnt_c = cast<WeaponCustomProjectile@>(CastToScriptClass(shootEnt));
 		@shootEnt.pev.owner = self.m_pPlayer.edict(); // do this or else crash	
-		@shootEnt_c.shoot_opts = active_opts;
-		shootEnt_c.pickup_classname = settings.weapon_classname;
+		WeaponCustomProjectile@ shootEnt_c = cast<WeaponCustomProjectile@>(CastToScriptClass(shootEnt));
+		if (shootEnt_c !is null)
+		{
+			@shootEnt_c.shoot_opts = @active_opts;
+			shootEnt_c.pickup_classname = settings.weapon_classname;
+		}
 		
 		g_EntityFuncs.DispatchSpawn(shootEnt.edict());
-		
-		EHandle mdlHandle = @shootEnt;
-		EHandle sprHandle;
-		
-		if (options.sprite.Length() > 0)
-		{
-			dictionary keyvalues;
-			keyvalues["origin"] = shootEnt.pev.origin.ToString();
-			keyvalues["model"] = options.sprite;
-			keyvalues["rendermode"] = "5";
-			keyvalues["renderamt"] = "255";
-			CBaseEntity@ spr = g_EntityFuncs.CreateEntity( "env_sprite", keyvalues, true );
-			spr.pev.movetype = MOVETYPE_FOLLOW;
-			@spr.pev.aiment = shootEnt.edict();
-			spr.pev.skin = shootEnt.entindex();
-			spr.pev.body = 0; // attachement point
-			sprHandle = @spr;
-		}
-		shootEnt_c.spriteAttachment = sprHandle;
-		
-		// attach a trail
-		if (options.trail_spr.Length() > 0)
-		{
-			NetworkMessage message(MSG_BROADCAST, NetworkMessages::SVC_TEMPENTITY, null);
-				message.WriteByte(TE_BEAMFOLLOW);
-				message.WriteShort(shootEnt.entindex());
-				message.WriteShort(options.trail_sprId);
-				message.WriteByte(options.trail_life);
-				message.WriteByte(options.trail_width);
-				message.WriteByte(options.trail_color.r);
-				message.WriteByte(options.trail_color.g);
-				message.WriteByte(options.trail_color.b);
-				message.WriteByte(options.trail_color.a);
-			message.End();
-		}
-		
-		if (options.life > 0)
-			g_Scheduler.SetTimeout("killProjectile", options.life, mdlHandle, sprHandle, active_opts);
 		
 		return shootEnt;
 	}
 	
 	CBaseEntity@ ShootProjectile()
-	{		
-		Math.MakeVectors( self.m_pPlayer.pev.v_angle + self.m_pPlayer.pev.punchangle );
+	{
+		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
 		
 		ProjectileOptions@ options = active_opts.projectile;
-		Vector projectile_velocity = g_Engine.v_forward * options.speed;
-		Vector projectile_ori = self.m_pPlayer.pev.origin + g_Engine.v_forward * 16 + g_Engine.v_right * 6;
-		projectile_ori = projectile_ori + self.m_pPlayer.pev.view_ofs * 0.5;
+		
+		// Get amount of velocity to add to projectile. Velocity axes are scaled relative to aim direction
+		Vector inf = options.player_vel_inf;
+		Vector pvel = self.m_pPlayer.pev.velocity;
+		pvel = g_Engine.v_right * DotProduct(g_Engine.v_right, pvel)*inf.x +
+			   g_Engine.v_up * DotProduct(g_Engine.v_up, pvel)*inf.y +
+			   g_Engine.v_forward * DotProduct(g_Engine.v_forward, pvel)*inf.z;
+			   
+		Vector projectile_velocity = g_Engine.v_forward * options.speed + pvel;
+		
+		Vector ofs = g_Engine.v_right*options.offset.x + g_Engine.v_up*options.offset.y + g_Engine.v_forward*options.offset.z;
+		Vector projectile_ori = self.m_pPlayer.GetGunPosition() + ofs;
 		float grenadeTime = options.life != 0 ? options.life : 3.5f; // timed grenades only
 		
 		CGrenade@ nade = null;
@@ -525,13 +440,13 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		else if (options.type == PROJECTILE_BANANA)
 			@nade = g_EntityFuncs.ShootBananaCluster( self.m_pPlayer.pev, projectile_ori, projectile_velocity );
 		else if (options.type == PROJECTILE_BOLT)
-			ShootCustomProjectile("crossbow_bolt");
+			ShootCustomProjectile("crossbow_bolt", projectile_ori, projectile_velocity);
 		else if (options.type == PROJECTILE_HVR)
-			ShootCustomProjectile("hvr_rocket");
+			ShootCustomProjectile("hvr_rocket", projectile_ori, projectile_velocity);
 		else if (options.type == PROJECTILE_SHOCK)
-			ShootCustomProjectile("shock_beam");
+			ShootCustomProjectile("shock_beam", projectile_ori, projectile_velocity);
 		else if (options.type == PROJECTILE_HORNET)
-			ShootCustomProjectile("playerhornet");
+			ShootCustomProjectile("playerhornet", projectile_ori, projectile_velocity);
 		else if (options.type == PROJECTILE_DISPLACER)
 			@shootEnt = g_EntityFuncs.CreateDisplacerPortal( projectile_ori, projectile_velocity, self.m_pPlayer.edict(), 250, 250 );
 		else if (options.type == PROJECTILE_GRENADE)
@@ -539,13 +454,16 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		else if (options.type == PROJECTILE_MORTAR)
 			@nade = g_EntityFuncs.ShootMortar( self.m_pPlayer.pev, projectile_ori, projectile_velocity );
 		else if (options.type == PROJECTILE_RPG)
+		{
 			@shootEnt = g_EntityFuncs.CreateRPGRocket(projectile_ori, self.m_pPlayer.pev.v_angle, self.m_pPlayer.edict());
+			shootEnt.pev.velocity = shootEnt.pev.velocity + projectile_velocity;
+		}
 		else if (options.type == PROJECTILE_WEAPON)
-			@shootEnt = ShootCustomProjectile("custom_projectile");
+			@shootEnt = ShootCustomProjectile("custom_projectile", projectile_ori, projectile_velocity);
 		else if (options.type == PROJECTILE_CUSTOM)
-			@shootEnt = ShootCustomProjectile("custom_projectile");
+			@shootEnt = ShootCustomProjectile("custom_projectile", projectile_ori, projectile_velocity);
 		else if (options.type == PROJECTILE_OTHER)
-			@shootEnt = ShootCustomProjectile(options.entity_class);
+			@shootEnt = ShootCustomProjectile(options.entity_class, projectile_ori, projectile_velocity);
 		else
 			println("Unknown projectile type: " + options.type);
 			
@@ -556,14 +474,134 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			if (active_opts.pev.spawnflags & FL_SHOOT_PROJ_NO_GRAV != 0) // disable gravity on projectile
 				shootEnt.pev.movetype = MOVETYPE_FLY;
+				
+			if (options.follow_mode != FOLLOW_NONE)
+			{
+				EHandle h_plr = self.m_pPlayer;
+				EHandle h_proj = shootEnt;
+				float dur = options.follow_time.y;
+				g_Scheduler.SetTimeout("projectile_follow_aim", options.follow_time.x, h_plr, h_proj, @active_opts, dur);
+			}
+			
+			EHandle mdlHandle = @shootEnt;
+			EHandle sprHandle;
+			
+			// TODO: Kill this when follow target dies (and its not a custom entity)
+			if (options.sprite.Length() > 0)
+			{
+				dictionary keyvalues;
+				keyvalues["origin"] = shootEnt.pev.origin.ToString();
+				keyvalues["model"] = options.sprite;
+				keyvalues["rendermode"] = "5";
+				keyvalues["renderamt"] = "255";
+				CBaseEntity@ spr = g_EntityFuncs.CreateEntity( "env_sprite", keyvalues, true );
+				spr.pev.movetype = MOVETYPE_FOLLOW;
+				@spr.pev.aiment = shootEnt.edict();
+				spr.pev.skin = shootEnt.entindex();
+				spr.pev.body = 0; // attachement point
+				sprHandle = @spr;
+			}
+			
+			WeaponCustomProjectile@ shootEnt_c = cast<WeaponCustomProjectile@>(CastToScriptClass(shootEnt));
+			if (shootEnt_c !is null)
+				shootEnt_c.spriteAttachment = sprHandle;
+			
+			// attach a trail
+			if (options.trail_spr.Length() > 0)
+			{
+				NetworkMessage message(MSG_BROADCAST, NetworkMessages::SVC_TEMPENTITY, null);
+					message.WriteByte(TE_BEAMFOLLOW);
+					message.WriteShort(shootEnt.entindex());
+					message.WriteShort(options.trail_sprId);
+					message.WriteByte(options.trail_life);
+					message.WriteByte(options.trail_width);
+					message.WriteByte(options.trail_color.r);
+					message.WriteByte(options.trail_color.g);
+					message.WriteByte(options.trail_color.b);
+					message.WriteByte(options.trail_color.a);
+				message.End();
+			}
+			
+			if (options.life > 0)
+				g_Scheduler.SetTimeout("killProjectile", options.life, mdlHandle, sprHandle, active_opts);
+				
+			if (settings.max_live_projectiles > 0)
+			{
+				liveProjectiles++;
+				MonitorProjectileLife(mdlHandle);
+			}
 		}
 		
+		// remove weapon from player if they threw it
 		if (options.type == PROJECTILE_WEAPON)
-		{
 			g_Scheduler.SetTimeout( "removeWeapon", 0, @self );
-		}
 		
 		return shootEnt;
+	}
+	
+	void MonitorProjectileLife(EHandle h_proj)
+	{
+		bool dead = false;
+		if (!h_proj)
+			dead = true;
+			
+		CBaseEntity@ proj = h_proj;
+		if (proj is null)
+			dead = true;
+		
+		if (dead)
+			liveProjectiles--;
+		else
+			g_Scheduler.SetTimeout(@this, "MonitorProjectileLife", 0.1, h_proj);
+	}
+	
+	// Returns false if attack should be aborted (medkit logic)
+	bool AttackMonster(Vector vecSrc, TraceResult tr)
+	{
+		CBaseEntity@ ent = g_EntityFuncs.Instance( tr.pHit );
+		if (ent is null)
+			return true;
+			
+		Vector attackDir = (tr.vecEndPos - vecSrc).Normalize();
+			
+		int dmgType = active_opts.shoot_type == SHOOT_MELEE ? DMG_CLUB : DMG_BULLET;
+		dmgType = active_opts.damageType(dmgType);
+			
+		// damage done before hitgroup multipliers
+		float attackDamage = active_opts.damage*windupMultiplier*partialAmmoModifier;
+		float baseDamage = applyDamageModifiers(attackDamage, ent, self.m_pPlayer, active_opts);
+		
+		if (baseDamage < 0)
+		{	
+			// avoid TraceAttack so scis don't think we're shooting at them
+			float healPoints = -heal(ent, active_opts, -baseDamage);
+			if (healPoints == 0 and active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0)
+				return false;
+
+			if (active_opts.pev.spawnflags & FL_SHOOT_PARTIAL_AMMO_SHOOT != 0)
+			{
+				// don't use all ammo if we were only able to heal a small amount
+				if (healPoints < attackDamage and attackDamage > 0)
+				{
+					float ammoScale = healPoints / attackDamage;
+					partialAmmoUsage = int(ammoScale * active_opts.ammo_cost);
+				}
+			}	
+		}
+		else
+		{
+			if (active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_DAMAGE != 0)
+				return false;
+
+			g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
+			
+			ent.TraceAttack(self.m_pPlayer.pev, baseDamage, attackDir, tr, dmgType);
+			g_WeaponFuncs.ApplyMultiDamage(ent.pev, self.m_pPlayer.pev);
+		}
+		
+		knockBack(ent, attackDir * active_opts.knockback);
+		
+		return true;
 	}
 	
 	void ShootBeam()
@@ -582,87 +620,44 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		beamStartTime = g_Engine.time;
 		minBeamTime = Math.max(active_opts.beams[0].time, active_opts.beams[1].time);
 		self.pev.nextthink = g_Engine.time;
+		
+		// constant beam sounds
+		hookAnimStarted = false;
+		hookAnimStartTime = g_Engine.time + active_opts.hook_delay;
 	}
-		
-	// calculates beams, end sprite locations, and damage
-	bool UpdateBeam(int beamId)
+	
+	// Calculate beam ricochets
+	array<BeamShot> CalcBeamShots()
 	{
-		BeamOptions@ beam_opts = active_opts.beams[beamId];
-		
-		if (beam_opts.time > 0 and beamStartTime + beam_opts.time < g_Engine.time)
-		{
-			DestroyBeam(beamId);
-			return false;
-		}
-		if (beam_opts.type == BEAM_DISABLED)
-			return false;
-			
-		bool doDamage = lastBeamDamage + 0.1 < g_Engine.time;
-		if (doDamage)
-			lastBeamDamage = g_Engine.time;
+		array<BeamShot> shots;
+					
+		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
+		//Vector vecAiming = spreadDir(g_Engine.v_forward, active_opts.bullet_spread, active_opts.bullet_spread_func);
 			
 		Vector vecSrc = self.m_pPlayer.GetGunPosition();
-		Vector perfectAim = self.m_pPlayer.GetAutoaimVector(0);
-		Vector vecEnd = vecSrc + perfectAim*active_opts.max_range;
+		Vector vecEnd = vecSrc + g_Engine.v_forward*active_opts.max_range;
 
 		edict_t@ traceEnt = self.m_pPlayer.edict();
 		
-		array<BeamImpact> impacts(active_opts.beam_ricochet_limit+1);
-		
-		int numRicochets = 1;
 		for (int i = 0; i < active_opts.beam_ricochet_limit+1; i++)
-		{
-			CBeam@ ricobeam = beams[beamId][i];
-			
-			// initial beam is special
-			if (i == 0)
-			{
-				if (ricobeam is null)
-				{
-					@ricobeam = @beams[beamId][i] = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
-					ricobeam.SetType(BEAM_ENTPOINT);
-					ricobeam.SetEndEntity(self.m_pPlayer);
-					ricobeam.SetEndAttachment(1);
-					int flags = 0;
-					if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
-						flags |= BEAM_FSINE;
-					if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
-						flags |= BEAM_FSOLID;
-					hook_beam.SetFlags( flags );
-					ricobeam.SetNoise(beam_opts.noise);
-					ricobeam.SetWidth(beam_opts.width);
-					ricobeam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
-					ricobeam.SetBrightness(beam_opts.color.a);
-					ricobeam.SetScrollRate(beam_opts.scrollRate);
-				}
-				ricobeam.SetStartPos(vecEnd);
-				continue;
-			}
-			
+		{			
 			TraceResult tr;
-			Vector dir = (vecEnd - vecSrc).Normalize();
-			g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, traceEnt, tr );
+			edict_t@ ignoreEnt = i == 0 ? self.m_pPlayer.edict() : self.edict();
+			g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, ignoreEnt, tr );
+			CBaseEntity@ ent = g_EntityFuncs.Instance( tr.pHit );
 			
-			if (tr.flFraction < 1.0)
+			BeamShot shot;
+			shot.startPos = vecSrc;
+			shot.tr = tr;
+			@shot.ent = @ent;
+			shots.insertLast(shot);
+			
+			if (tr.flFraction < 1.0 and tr.pHit !is null)
 			{
-				CBaseEntity@ ent = null;
-				if (tr.pHit !is null) 
-					@ent = g_EntityFuncs.Instance( tr.pHit );
+				Vector dir = (vecEnd - vecSrc).Normalize();
 				
-				impacts[i].pos = tr.vecEndPos;
-				
-				if (ent !is null)
-				{
-					if (ent.ReflectGauss()) 
-						@impacts[i].ent = ent; // don't ricochet of things that take damage
-					if (!ent.ReflectGauss())
-					{
-						if (ent.IsMonster()) {
-							ent.pev.velocity = ent.pev.velocity + dir*active_opts.knockback;
-						}						
-						break;
-					}
-				}
+				if (ent !is null and !ent.IsBSPModel())	
+					break; // don't ricochet off monsters
 				
 				// Calculate reflection vector
 				Vector n = tr.vecPlaneNormal;
@@ -670,106 +665,158 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				float ricAngle = -dotdir * 90;
 				if (ricAngle > active_opts.rico_angle)
 					break;
-				
 				Vector r = (dir - 2*(dotdir)*n);
+				
+				// set up trace points for next iteration
 				vecSrc = tr.vecEndPos;
 				vecEnd = vecSrc + r*active_opts.max_range;
-				
-				if (ricobeam is null)
-				{
-					@ricobeam = @beams[beamId][i] = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
-					int flags = 0;
-					if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
-						flags |= BEAM_FSINE;
-					if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
-						flags |= BEAM_FSOLID;
-					hook_beam.SetFlags( flags );
-					ricobeam.SetNoise(beam_opts.noise);
-					ricobeam.SetWidth(beam_opts.width);
-					ricobeam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
-					ricobeam.SetBrightness(beam_opts.color.a);
-					ricobeam.SetScrollRate(beam_opts.scrollRate);
-				}
-				ricobeam.PointsInit(vecEnd, vecSrc);
-				@traceEnt = ricobeam.edict(); // all beams after this one can collide with owner
-				if (i > 0)
-				{
-					beams[beamId][i-1].SetStartPos(tr.vecEndPos);
-					
-					if (minBeamTime > 0 or doDamage)
-						custom_ricochet(tr.vecEndPos, n, active_opts.effect1, beams[beamId][i-1], ent);
-				}
-
-				numRicochets = i+1;
 			}
 			else
-			{
-				numRicochets = i;
 				break;
-			}
 		}
 		
-		// clip final beam
-		TraceResult tr;
-		g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, traceEnt, tr );
-		CBeam@ lastBeam = beams[beamId][numRicochets-1];
-		lastBeam.SetStartPos(tr.vecEndPos);
+		return shots;
+	}
 		
-		// last impact check
-		if (tr.flFraction < 1.0)
-		{
-			if (tr.pHit !is null) 
-			{
-				CBaseEntity@ ent = g_EntityFuncs.Instance( tr.pHit );
-				impacts[numRicochets-1].pos = tr.vecEndPos;
-				if (ent.entindex() != 0)
-				{
-					@impacts[numRicochets-1].ent = ent;
-				}
-			}
-		}
-
-		// draw impact sprites
+	// calculates beams, end sprite locations, and damage
+	void UpdateBeams()
+	{			
+		bool doDamage = lastBeamDamage + active_opts.beam_impact_speed < g_Engine.time;
+		if (doDamage)
+			lastBeamDamage = g_Engine.time;
+		
+		int MAX_BEAMS = 2;
+		
+		array<BeamShot> beamShots = CalcBeamShots();
+		
 		for (int i = 0; i < active_opts.beam_ricochet_limit+1; i++)
 		{
-			if (minBeamTime == 0) // constant beams have animated sprites (like egon)
+			// create or update a beam
+			if (i < int(beamShots.length()))
 			{
-				if (impacts[i].ent !is null)
-				{
-					if (beamHits[i] is null)
+				BeamShot@ shot = @beamShots[i];
+				
+				// impact damages and effects
+				if (shot.tr.flFraction < 1.0)
+				{				
+					if (shot.ent !is null)
 					{
-						@beamHits[i] = g_EntityFuncs.CreateSprite( active_opts.beam_impact_spr, impacts[i].pos, true, 10 );
-						beamHits[i].pev.rendermode = kRenderGlow;
-						beamHits[i].pev.renderamt = 255;
-						beamHits[i].pev.renderfx = kRenderFxNoDissipation;
+						if (doDamage)
+							AttackMonster(shot.startPos, shot.tr);	
 					}
-					beamHits[i].pev.origin = impacts[i].pos;
+									
+					EHandle h_plr = self.m_pPlayer;
+					EHandle h_ent = shot.ent;
+					if (minBeamTime > 0 or doDamage)
+					{
+						DecalTarget dt = getProjectileDecalTarget(null, shot.tr.vecEndPos, 32);
+						weapon_custom_effect@ ef;
+						@ef = i == int(beamShots.length()-1) ? @active_opts.effect1 : @active_opts.effect2;
+						custom_effect(shot.tr.vecEndPos, ef, null, h_ent, h_plr, dt);
+					}
 				}
-				else if (beamHits[i] !is null)
+				
+				// create or update beam ents
+				for (int k = 0; k < MAX_BEAMS; k++)
 				{
-					g_EntityFuncs.Remove( beamHits[i] );
-					@beamHits[i] = null;
+					BeamOptions@ beam_opts = active_opts.beams[k];
+		
+					if (beam_opts.type == BEAM_DISABLED)
+						continue;
+					
+					CBeam@ ricobeam;
+					
+					// create beam for current slot, if needed
+					if (!beams[k][i])
+					{
+						@ricobeam = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
+						int flags = 0;
+						if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+							flags |= BEAM_FSINE;
+						if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
+							flags |= BEAM_FSOLID;
+						ricobeam.SetFlags( flags );
+						
+						// First beam is attached to player weapon bone
+						if (i == 0)
+						{
+							ricobeam.SetType(BEAM_ENTPOINT);
+							ricobeam.SetEndEntity(self.m_pPlayer);
+							ricobeam.SetEndAttachment(1);
+						}
+						
+						ricobeam.SetNoise(beam_opts.noise);
+						ricobeam.SetWidth(beam_opts.width);
+						ricobeam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
+						ricobeam.SetBrightness(beam_opts.color.a);
+						ricobeam.SetScrollRate(beam_opts.scrollRate);
+						
+						beams[k][i] = ricobeam;
+					}
+					
+					CBaseEntity@ ricobeamEnt = beams[k][i];
+					@ricobeam = cast<CBeam@>(@ricobeamEnt);
+					
+					// Update position of beam
+					if (i == 0)
+						ricobeam.SetStartPos(shot.tr.vecEndPos);
+					else
+						ricobeam.PointsInit(shot.tr.vecEndPos, shot.startPos);
 				}
-			} 
-			else if (i == numRicochets-1) // temporary beams get glow sprites (like gauss)
-			{
-				// don't show impact sprites on monsters
-				if (impacts[i].ent is null or impacts[i].ent.IsBSPModel())
-					te_glowsprite(impacts[i].pos, active_opts.beam_impact_spr, int(minBeamTime*10), 10, 200);
+				
+				// create or update impact sprites
+				if (active_opts.beam_impact_spr.Length() > 0)
+				{
+					bool shouldImpact = shot.ent !is null;
+					shouldImpact = shouldImpact ;
+					
+					if (shot.ent !is null and (shot.ent.IsMonster() or isBreakableEntity(shot.ent)))
+					{
+						// kill sprite if it's currently expanding
+						CBaseEntity@ beamEnt = beamHits[i];
+						if (beamHits[i] and beamEnt.pev.deadflag != 0)
+							g_EntityFuncs.Remove( beamHits[i] );
+						
+						CSprite@ impact;
+						if (!beamHits[i])
+						{
+							@impact = g_EntityFuncs.CreateSprite( active_opts.beam_impact_spr, 
+																	   shot.tr.vecEndPos, true, 10 );
+							impact.pev.rendermode = kRenderGlow;
+							impact.pev.renderamt = active_opts.beam_impact_spr_opacity;
+							impact.pev.scale = active_opts.beam_impact_spr_scale;
+							impact.pev.framerate = 0;
+							impact.pev.renderfx = kRenderFxNoDissipation;
+							impact.pev.movetype = MOVETYPE_NONE;
+							beamHits[i] = impact;
+						}
+						@beamEnt = beamHits[i];
+						@impact = cast<CSprite@>(@beamEnt);
+						
+						impact.pev.origin = shot.tr.vecEndPos;
+						
+						// manual frame increments since framerate is broken (stutter if not multiple of 5)
+						impact.pev.frame += active_opts.beam_impact_spr_fps*g_Engine.frametime;
+						impact.pev.frame = impact.pev.frame % impact.Frames();
+					}
+					else if (beamHits[i])
+						g_EntityFuncs.Remove( beamHits[i] );
+				}
 			}
-		}
-		
-		// kill previous ricochet beams
-		for (int i = numRicochets; i < active_opts.beam_ricochet_limit+1; i++)
-		{
-			if (beams[beamId][i] !is null)
+			else 
 			{
-				g_EntityFuncs.Remove( beams[beamId][i] );
-				@beams[beamId][i] = null;
+				// destroy beams that are no longer active
+				for (int k = 0; k < MAX_BEAMS; k++)
+				{
+					if (beams[k][i])
+						g_EntityFuncs.Remove( beams[k][i] );
+				}
+				// destroy the impact sprites too
+				if (beamHits[i])
+					g_EntityFuncs.Remove( beamHits[i] );
 			}
+			
 		}
-		
-		return true;
 	}
 	
 	void DestroyBeams()
@@ -780,73 +827,43 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			for (uint k = 0; k < beams.length(); k++)
 			{
-				if (beams[k][i] !is null)
-				{
+				if (beams[k][i])
 					g_EntityFuncs.Remove( beams[k][i] );
-					@beams[k][i] = null;
-				}
 			}
-			if (beamHits[i] !is null)
+			if (beamHits[i])
 			{
-				g_EntityFuncs.Remove( beamHits[i] );
-				@beamHits[i] = null;
-			}
-		}
-	}
-	
-	// draw another beam on top of the primary one (skip all the ricochet and damage math)
-	void AddBeam(int beamId)
-	{
-		BeamOptions@ beam_opts = active_opts.beams[beamId];
-		for (int i = 0; i < active_opts.beam_ricochet_limit+1; i++)
-		{
-			CBeam@ copybeam = beams[0][i];
-			if (copybeam is null)
-			{
-				g_EntityFuncs.Remove( beams[beamId][i] );
-				@beams[beamId][i] = null;
-				continue;
-			}
+				CBaseEntity@ beamEnt = beamHits[i];
+				CSprite@ beam = cast<CSprite@>(@beamEnt);
 			
-			CBeam@ ricobeam = beams[beamId][i];
-			if (ricobeam is null)
-			{
-				@ricobeam = @beams[beamId][i] = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
-				int flags = 0;
-				if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
-					flags |= BEAM_FSINE;
-				if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
-					flags |= BEAM_FSOLID;
-				hook_beam.SetFlags( flags );
-				if (i == 0)
-				{
-					ricobeam.SetType(BEAM_ENTPOINT);
-					ricobeam.SetEndEntity(self.m_pPlayer);
-					ricobeam.SetEndAttachment(1);
-				}
-				ricobeam.SetNoise(beam_opts.noise);
-				ricobeam.SetWidth(beam_opts.width);
-				ricobeam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
-				ricobeam.SetBrightness(beam_opts.color.a);
-				ricobeam.SetScrollRate(beam_opts.scrollRate);
+				beam.Expand(16.0f, 512.0f); // autokills the sprite when renderamt <= 0
+				beam.pev.deadflag = 1; // indicate that this sprite should be dead soon
+				
 			}
-			if (i == 0)
-				ricobeam.SetStartPos(copybeam.GetStartPos());
-			else
-				ricobeam.PointsInit(copybeam.GetStartPos(), copybeam.GetEndPos());
 		}
 	}
-	
+		
 	void DestroyBeam(int beamId)
 	{
 		for (int i = 0; i < active_opts.beam_ricochet_limit+1; i++)
-		{
-			if (beams[beamId][i] !is null)
-			{
+			if (beams[beamId][i])
 				g_EntityFuncs.Remove( beams[beamId][i] );
-				@beams[beamId][i] = null;
-			}
-		}
+	}
+	
+	void CancelBeam()
+	{
+		DestroyBeams();
+		beam_active = false;
+		
+		if (minBeamTime == 0)
+		{
+			if (lastShootSnd !is null)
+				lastShootSnd.stop(self.m_pPlayer, CHAN_WEAPON);
+			active_opts.hook_snd.stop(self.m_pPlayer, CHAN_WEAPON);
+			active_opts.hook_snd2.play(self.m_pPlayer, CHAN_WEAPON);
+			self.SendWeaponAnim( settings.getRandomIdleAnim() );
+			//self.SendWeaponAnim( active_opts.hook_anim2, 0, 0 );
+			//self.m_flTimeWeaponIdle = g_Engine.time + active_opts.hook_delay2; // idle after this	
+		}	
 	}
 	
 	void DetonateSatchels()
@@ -866,26 +883,32 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			hookAnimStartTime = g_Engine.time + active_opts.hook_delay;
 			
 			hook_ent = ShootProjectile();
-			if (hook_beam is null)
+			
+			CBeam@ beam;
+			if (!hook_beam)
 			{
 				BeamOptions@ beam_opts = active_opts.beams[0];
-				@hook_beam = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
-				hook_beam.SetType(BEAM_ENTS);
-				hook_beam.SetEndEntity(self.m_pPlayer);
-				hook_beam.SetEndAttachment(1);
-				hook_beam.SetStartEntity(hook_ent);
+				@beam = g_EntityFuncs.CreateBeam( beam_opts.sprite, 16 );
+				beam.SetType(BEAM_ENTS);
+				beam.SetEndEntity(self.m_pPlayer);
+				beam.SetEndAttachment(1);
+				beam.SetStartEntity(hook_ent);
 				int flags = 0;
 				if (beam_opts.type == BEAM_SPIRAL or beam_opts.type == BEAM_SPIRAL_OPAQUE)
 					flags |= BEAM_FSINE;
 				if (beam_opts.type == BEAM_LINEAR_OPAQUE or beam_opts.type == BEAM_SPIRAL_OPAQUE)
 					flags |= BEAM_FSOLID;
-				hook_beam.SetFlags( flags );
-				hook_beam.SetNoise(beam_opts.noise);
-				hook_beam.SetWidth(beam_opts.width);
-				hook_beam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
-				hook_beam.SetBrightness(beam_opts.color.a);
-				hook_beam.SetScrollRate(beam_opts.scrollRate);
+				beam.SetFlags( flags );
+				beam.SetNoise(beam_opts.noise);
+				beam.SetWidth(beam_opts.width);
+				beam.SetColor(beam_opts.color.r, beam_opts.color.g, beam_opts.color.b);
+				beam.SetBrightness(beam_opts.color.a);
+				beam.SetScrollRate(beam_opts.scrollRate);
+				hook_beam = beam;
 			}
+			
+			CBaseEntity@ beamEnt = hook_beam;
+			@beam = cast<CBeam@>(@beamEnt);
 			
 			self.pev.nextthink = g_Engine.time;
 		}
@@ -938,11 +961,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					{
 						// wind down finished
 						windingUp = false;
+						windupLoopEntered = false;
 						windupSoundActive = false;
 						windingDown = false;
 						windupFinished = false;
 						windupAmmoUsed = 0;
-						active_opts.windup_snd.stop(self.m_pPlayer, CHAN_STATIC);
+						active_opts.windup_snd.stop(self.m_pPlayer, CHAN_VOICE);
 					}
 					else
 					{
@@ -952,7 +976,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 						//println("T : " + newPitch);
 						
 						if (active_opts.windup_snd.file.Length() > 0)
-							g_SoundSystem.EmitSoundDyn( self.m_pPlayer.edict(), CHAN_STATIC, active_opts.windup_snd.file, 
+							g_SoundSystem.EmitSoundDyn( self.m_pPlayer.edict(), CHAN_VOICE, active_opts.windup_snd.file, 
 														1.0, ATTN_NORM, SND_CHANGE_PITCH, newPitch);
 					}
 					
@@ -961,12 +985,16 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			else // fire a bullet at the current windup and stop
 			{
 				windingUp = false;
+				windupLoopEntered = false;
 				windupSoundActive = false;
 				windingDown = false;
 				windupFinished = false;
 				
+				active_opts.windup_snd.stop(self.m_pPlayer, CHAN_VOICE);
+				
 				if (active_opts.windup_action != WINDUP_SHOOT_ONCE_IF_HELD or windupHeld)
-					DoAttack(true);
+					if (AllowedToShoot(active_opts))
+						DoAttack(true);
 			}
 		}
 		else
@@ -985,6 +1013,52 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				}
 			}
 			
+			// switch to looped windup animation when the time is right
+			if (!windupLoopEntered)
+			{
+				if (windupStart + active_opts.windup_anim_time < g_Engine.time)
+				{
+					if (active_opts.windup_anim_loop != -1)
+						self.SendWeaponAnim( active_opts.windup_anim_loop, 0, 0 );
+					windupLoopEntered = true;
+				}
+			}
+			
+			if (!windupOvercharged and active_opts.windup_overcharge_time > 0)
+			{
+				if (windupStart + active_opts.windup_overcharge_time < g_Engine.time)
+				{
+					windupOvercharged = true;
+					
+					custom_user_effect(self.m_pPlayer, active_opts.user_effect2);
+					
+					if (active_opts.windup_overcharge_anim >= 0)
+						self.SendWeaponAnim( active_opts.windup_overcharge_anim, 0, 0 );	
+					
+					if (active_opts.windup_overcharge_action != OVERCHARGE_CONTINUE)
+					{
+						windingUp = false;
+						windupLoopEntered = false;
+						windupSoundActive = false;
+						windingDown = false;
+						windupFinished = false;
+						windupHeld = false;
+						
+						if (active_opts.windup_overcharge_action == OVERCHARGE_SHOOT)
+							if (AllowedToShoot(active_opts))
+								DoAttack(true);
+						
+						if (active_opts.windup_overcharge_anim <= 0)
+							self.SendWeaponAnim( settings.getRandomIdleAnim() );
+						
+						Cooldown(active_opts);
+						active_opts.windup_snd.stop(self.m_pPlayer, CHAN_VOICE);
+						
+						return;
+					}
+				}
+			}
+			
 			float p = Math.min(1.0f, timePassed / active_opts.windup_time); // progress
 			float q = 1.0f - p; // inverse progress
 			bool playWindupDuringShoot = true;
@@ -999,7 +1073,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			{
 				self.SendWeaponAnim( active_opts.windup_anim, 0, 0 );
 				
-				active_opts.windup_snd.play(self.m_pPlayer, CHAN_STATIC, 1.0f, active_opts.windup_pitch_start);											
+				active_opts.windup_snd.play(self.m_pPlayer, CHAN_VOICE, 1.0f, active_opts.windup_pitch_start);											
 				windupSoundActive = true;
 			}
 			else if (timePassed < active_opts.windup_time)
@@ -1007,23 +1081,25 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				p = WindupEase(p, q, active_opts.windup_easing, false);
 				
 				windupMultiplier = 1.0f + p*(active_opts.windup_mult-1.0f);
+				windupKickbackMultiplier = 1.0f + p*(active_opts.windup_kick_mult-1.0f);
 				float delta = active_opts.windup_pitch_end - active_opts.windup_pitch_start;
-				debugln("Windup Multiplier: " + windupMultiplier);
+				debugln("Windup Damage Multiplier: " + windupMultiplier);
 				int newPitch = active_opts.windup_pitch_start + int(delta*p + 0.5f);
 				//println("T : " + newPitch);
 				
 				if (newPitch != active_opts.windup_pitch_start)
-					active_opts.windup_snd.play(self.m_pPlayer, CHAN_STATIC, 1.0f, newPitch, SND_CHANGE_PITCH);
+					active_opts.windup_snd.play(self.m_pPlayer, CHAN_VOICE, 1.0f, newPitch, SND_CHANGE_PITCH);
 				
 				int ammoUsedNow = int(p*active_opts.windup_cost + 0.5f);
 				DepleteAmmo(Math.max(0, ammoUsedNow - windupAmmoUsed));
-				windupAmmoUsed = ammoUsedNow;
+				windupAmmoUsed = Math.max(windupAmmoUsed, ammoUsedNow);
 			}
 			else if (timePassed > active_opts.windup_time)
 			{		
 				windupMultiplier = active_opts.windup_mult;
+				windupKickbackMultiplier = active_opts.windup_kick_mult;
 				if (!windupFinished)
-					debugln("Windup Multiplier: " + windupMultiplier);
+					debugln("Windup Damage Multiplier: " + windupMultiplier);
 				windupFinished = true;
 				
 				bool onceHeld = active_opts.windup_action == WINDUP_SHOOT_ONCE_IF_HELD and windupHeld;
@@ -1032,7 +1108,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					windingUp = false;
 					windupSoundActive = false;
 					if (active_opts.windup_snd.file.Length() > 0)
-						g_SoundSystem.StopSound( self.m_pPlayer.edict(), CHAN_STATIC, active_opts.windup_snd.file);
+						g_SoundSystem.StopSound( self.m_pPlayer.edict(), CHAN_VOICE, active_opts.windup_snd.file);
 					if (AllowedToShoot(active_opts))
 						DoAttack(true);
 						
@@ -1051,10 +1127,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 						if (!shouldWindDown)
 						{
 							windingUp = false;
+							windupLoopEntered = false;
 							windupFinished = false;
 							windupSoundActive = true;
 							windupAmmoUsed = 0;
 							windupMultiplier = 1.0f;
+							windupKickbackMultiplier = 1.0f;
 						}
 					}
 				}
@@ -1106,21 +1184,19 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				if (reloading == 2)
 				{
 					self.SendWeaponAnim( settings.reload_end_anim );
-					settings.reload_end_snd.play(self.m_pPlayer, CHAN_STATIC);
+					settings.reload_end_snd.play(self.m_pPlayer, CHAN_VOICE);
 					nextShootTime = g_Engine.time + settings.reload_end_time;
-					self.m_flTimeWeaponIdle = nextShootTime;
+					self.m_flTimeWeaponIdle = nextShootTime + 1; // I can't bear adding another keyvalue for this delay
 					reloading = 0;
 				}
 				else
 				{
 					if (reloading == 1 and ReloadContinuous())
-					{
 						reloading = 2;
-					}
 
 					BaseClass.Reload();
 					self.SendWeaponAnim( settings.reload_anim );
-					settings.reload_snd.play(self.m_pPlayer, CHAN_STATIC);
+					settings.reload_snd.play(self.m_pPlayer, CHAN_VOICE);
 					nextReload = g_Engine.time + settings.reload_time;
 					nextShootTime = nextReload;
 				}
@@ -1130,29 +1206,36 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			
 		if (beam_active)
 		{
-			if (self.m_pPlayer.pev.button & 1 != 0 and minBeamTime == 0 or first_beam_shoot) 
+			if (windupHeld and minBeamTime == 0 or first_beam_shoot) 
 			{
-				UpdateBeam(0);
-				AddBeam(1);	
-				first_beam_shoot = false;			
+				UpdateBeams();	
+				first_beam_shoot = false;
+
+				// hook anim vars shared with constant beam (basically the same thing)
+				if (minBeamTime == 0 and !hookAnimStarted and hookAnimStartTime <= g_Engine.time)
+				{
+					hookAnimStarted = true;
+					active_opts.hook_snd.play(self.m_pPlayer, CHAN_WEAPON);
+					self.SendWeaponAnim( active_opts.hook_anim, 0, 0 );
+				}				
 			}
 			else if (beamStartTime + minBeamTime > g_Engine.time)
 			{
 				// kill beams with durations less than the total beam duration
 				for (uint k = 0; k < active_opts.beams.length(); k++)
 				{
-					if (beams[k][0] is null)
+					if (!beams[k][0])
 						continue;
 					BeamOptions@ beam_opts = active_opts.beams[k];
-					if (beamStartTime + beam_opts.time < g_Engine.time)
+					if (beam_opts.time > 0 and beamStartTime + beam_opts.time < g_Engine.time)
 						DestroyBeam(k);
 				}
 			}
 			else
 			{
-				DestroyBeams();
-				beam_active = false;
+				CancelBeam();			
 			}
+			
 		}
 		else if (burstFiring)
 		{
@@ -1198,9 +1281,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				self.SendWeaponAnim( active_opts.hook_anim2, 0, 0 );
 				self.m_flTimeWeaponIdle = g_Engine.time + active_opts.hook_delay2; // idle after this
 				
-				if (hook_beam !is null)
+				if (hook_beam)
 					g_EntityFuncs.Remove( hook_beam );
-				@hook_beam = null;
+				hook_beam = null;
 			}
 			windupHeld = false;
 		}
@@ -1240,6 +1323,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			float cooldownVal = opts.cooldown;
 			if (opts.shoot_type == SHOOT_MELEE and (!meleeHit or abortAttack))
 				cooldownVal = opts.melee_miss_cooldown;
+			if (windupOvercharged)
+				cooldownVal = opts.windup_overcharge_cooldown;
 			//self.m_flNextPrimaryAttack = WeaponTimeBase() + cooldownVal;
 			//self.m_flNextSecondaryAttack = WeaponTimeBase() + cooldownVal;
 			//self.m_flNextTertiaryAttack = WeaponTimeBase() + cooldownVal;
@@ -1294,25 +1379,29 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		// kickback
 		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
 		
-		Vector kickVel = g_Engine.v_forward * -active_opts.kickback;
+		Vector kickVel = g_Engine.v_forward * -active_opts.kickback*windupKickbackMultiplier;
 		self.m_pPlayer.pev.velocity = self.m_pPlayer.pev.velocity + kickVel;
 		
 		int ammo_cost = partialAmmoUsage != -1 ? partialAmmoUsage : active_opts.ammo_cost;
 		DepleteAmmo(ammo_cost);
 		
+		if (active_opts.pev.spawnflags & FL_SHOOT_QUAKE_MUZZLEFLASH != 0)
+			self.m_pPlayer.pev.effects |= EF_MUZZLEFLASH;
+		
+		bool constantBeamStarted = minBeamTime == 0 and first_beam_shoot;
+		bool shouldPlayAttackAnim = active_opts.shoot_type != SHOOT_BEAM or constantBeamStarted;
+		
 		// play random first-person weapon animation
-		if (!hookAnimStarted or meleeHit)
+		if ((!hookAnimStarted or meleeHit) and shouldPlayAttackAnim)
 		{
 			int anim = meleeHit ? getRandomMeleeAnim() : active_opts.shoot_empty_anim;
 			if (!meleeHit and (!EmptyShoot() or anim < 0))
 				anim = getRandomShootAnim();
 			self.SendWeaponAnim( anim, 0, 0 );
 		}
-		
+
 		// thirperson animation
-		if (!windupAttack)
-			self.m_pPlayer.SetAnimation( PLAYER_ATTACK1 );
-		else
+		if (windupAttack and settings.player_anims == ANIM_REF_CROWBAR)
 		{
 			// Manually set wrench windup attack animation
 			self.m_pPlayer.m_Activity = ACT_RELOAD;
@@ -1321,6 +1410,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			self.m_pPlayer.ResetSequenceInfo();
 			//self.m_pPlayer.pev.framerate = 0.5f;
 		}
+		else if (shouldPlayAttackAnim)
+			self.m_pPlayer.SetAnimation( PLAYER_ATTACK1 );
 		
 		// recoil
 		self.m_pPlayer.pev.punchangle.x = -Math.RandomFloat(active_opts.recoil.x, active_opts.recoil.y);
@@ -1334,14 +1425,20 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		// random shoot sound
 		shootCount++;
 		bool meleeSkip = active_opts.shoot_type == SHOOT_MELEE;
-		bool noOverlap = active_opts.pev.spawnflags & FL_SHOOT_NO_MELEE_SOUND_OVERLAP != 0;
-		meleeSkip = meleeSkip and noOverlap;
-		if (!meleeSkip and !shootingHook)
+		bool noSndOverlap = active_opts.pev.spawnflags & FL_SHOOT_NO_MELEE_SOUND_OVERLAP != 0;
+		bool constantBeaming = beam_active and minBeamTime == 0 and !first_beam_shoot;
+		meleeSkip = meleeSkip and noSndOverlap;
+		if (!meleeSkip and !shootingHook and !constantBeaming)
 		{
 			WeaponSound@ snd = active_opts.getRandomShootSound();
-			SOUND_CHANNEL channel = shootCount % 2 == 0 or noOverlap ? CHAN_WEAPON : CHAN_STATIC;
+			if (EmptyShoot() and active_opts.shoot_empty_snd.file.Length() > 0)
+				@snd = @active_opts.shoot_empty_snd;
+			SOUND_CHANNEL channel = shootCount % 2 == 0 or noSndOverlap ? CHAN_WEAPON : CHAN_VOICE;
+			if (active_opts.shoot_type == SHOOT_MELEE)
+				channel = CHAN_WEAPON;
 			if (snd !is null)
 				snd.play(self.m_pPlayer, channel);
+			@lastShootSnd = @snd;
 		}
 		
 		// monster reactions to shooting or danger
@@ -1381,6 +1478,15 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			te_dlight(lpos, flash_size, flash_color, flash_life, flash_decay);
 		}
 		
+		custom_user_effect(@self.m_pPlayer, @active_opts.user_effect1);
+		
+		if (noSndOverlap)
+		{
+			if (lastCooldownSnd !is null)
+				lastCooldownSnd.stop(self.m_pPlayer, CHAN_VOICE);
+		}
+		nextCooldownSound = g_Engine.time + active_opts.cooldown_sound_delay;
+		
 		Cooldown(active_opts);
 	}
 		
@@ -1391,7 +1497,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		abortAttack = false;
 		partialAmmoUsage = -1;
 		
-		partialAmmoModifier = 1.0f;
+		if (!windupAttack)
+		{
+			windupMultiplier = 1.0f;
+			partialAmmoModifier = 1.0f;
+		}
 		if (active_opts.pev.spawnflags & FL_SHOOT_PARTIAL_AMMO_SHOOT != 0)
 		{
 			if (settings.clip_size() > 0)
@@ -1484,7 +1594,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void DepleteAmmo(int amt)
 	{
 		if (active_ammo_type == -1) return;
-		if (self.m_iClip > 0) 
+		
+		bool shouldUseClip = active_opts.isPrimary() or active_ammo_type == self.m_iPrimaryAmmoType;
+		if (self.m_iClip > 0 and shouldUseClip) 
 			self.m_iClip -= amt;
 		else // gun doesn't use a clip
 			self.m_pPlayer.m_rgAmmo( active_ammo_type, Math.max(0, AmmoLeft(active_ammo_type)-amt));
@@ -1506,13 +1618,22 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (active_opts.windup_time > 0 and !windingUp)
 		{
 			windingUp = true;
+			windupLoopEntered = false;
 			windingDown = false;
 			windupFinished = false;
 			windupHeld = true;
 			windupSoundActive = false;
+			windupOvercharged = false;
 			windupMultiplier = 1.0f;
+			windupKickbackMultiplier = 1.0f;
 			windupStart = g_Engine.time;
 			self.pev.nextthink = g_Engine.time;
+			
+			if (active_opts.windup_cost > 0)
+			{
+				windupAmmoUsed = 1;
+				DepleteAmmo(1); // don't let user get away with free shots
+			}
 			
 			if (settings.player_anims == ANIM_REF_CROWBAR)
 			{
@@ -1560,7 +1681,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			return false;
 		}
 		
-		if (shootingHook)
+		if (shootingHook or beam_active)
 		{
 			windupHeld = true;
 		}
@@ -1606,17 +1727,21 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (ammoType != -1) // ammo used at all?
 		{
 			bool partialAmmoShoot = (opts.pev.spawnflags & FL_SHOOT_PARTIAL_AMMO_SHOOT) != 0;
-			bool emptyClip = settings.clip_size() > 0 and self.m_iClip < opts.ammo_cost;
-			bool emptyAmmo = settings.clip_size() <= 0 and AmmoLeft(ammoType) < opts.ammo_cost;
+			bool shouldUseClip = opts.isPrimary() or ammoType == self.m_iPrimaryAmmoType;
+			bool emptyClip = (settings.clip_size() > 0 and self.m_iClip < opts.ammo_cost);
+			bool emptyAmmo = AmmoLeft(ammoType) < opts.ammo_cost;
 			emptyClip = emptyClip and (!partialAmmoShoot or self.m_iClip <= 0);
 			emptyAmmo = emptyAmmo and (!partialAmmoShoot or AmmoLeft(ammoType) <= 0);
-			if (emptyClip or emptyAmmo)
+			if ((emptyClip and shouldUseClip) or (!shouldUseClip and emptyAmmo))
 			{
-				PlayEmptySound();
 				emptySound = true;
 				canshoot = false;
 			}
 		}
+		
+		if (opts.shoot_type == SHOOT_PROJECTILE and settings.max_live_projectiles > 0 and
+				liveProjectiles >= settings.max_live_projectiles)
+			canshoot = false;
 		
 		if (!canshoot)
 		{
@@ -1644,9 +1769,16 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (active_fire == 2) self.m_flNextTertiaryAttack = time;
 	}
 	
+	void CancelZoom()
+	{
+		self.SetFOV(0);
+		self.m_fInZoom = false;
+		if (settings.player_anims == ANIM_REF_BOW)
+			self.m_pPlayer.set_m_szAnimExtension("bow");
+	}
+	
 	void CommonAttack(int attackNum)
 	{
-
 		int next_fire = attackNum;
 		weapon_custom_shoot@ next_opts = @settings.fire_settings[next_fire];
 		weapon_custom_shoot@ alt_opts = @settings.alt_fire_settings[next_fire];
@@ -1666,6 +1798,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			if (fireAct == FIRE_ACT_ZOOM)
 			{
 				self.SetFOV(primaryAlt ? 0 : settings.zoom_fov);
+				self.m_fInZoom = !self.m_fInZoom;
+				if (settings.player_anims == ANIM_REF_BOW)
+					self.m_pPlayer.set_m_szAnimExtension(self.m_fInZoom ? "bowscope" : "bow");
+				
 			}
 			primaryAlt = !primaryAlt;
 			
@@ -1673,7 +1809,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			weapon_custom_shoot@ p_alt_opts = @settings.alt_fire_settings[0];
 			
 			weapon_custom_shoot@ next_p_opts = primaryAlt ? @p_alt_opts : @p_opts;
-			next_p_opts.toggle_snd.play(self.m_pPlayer, CHAN_STATIC);
+			next_p_opts.toggle_snd.play(self.m_pPlayer, CHAN_VOICE);
 			if (next_p_opts.toggle_txt.Length() > 0)
 				g_PlayerFuncs.PrintKeyBindingString(self.m_pPlayer, next_p_opts.toggle_txt);
 			
@@ -1727,6 +1863,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	{
 		if (!cooldownFinished() or reloading > 0)
 			return;
+			
+		if (liveProjectiles > 0 and active_opts.projectile.follow_mode == FOLLOW_CROSSHAIRS)
+			return; // don't reload if we're controlling a projectile
 		
 		if (settings.pev.spawnflags & FL_WEP_CONTINUOUS_RELOAD != 0 and 
 			self.m_iClip < settings.clip_size() and AmmoLeft(active_ammo_type) >= settings.reload_ammo_amt)
@@ -1736,7 +1875,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			nextReload = WeaponTimeBase() + settings.reload_start_time;
 			nextShootTime = nextReload;
 			self.pev.nextthink = g_Engine.time;
-			settings.reload_start_snd.play(self.m_pPlayer, CHAN_STATIC);
+			settings.reload_start_snd.play(self.m_pPlayer, CHAN_VOICE);
+			CancelZoom();
 			return;
 		}
 		
@@ -1745,23 +1885,33 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			reloadAnim = settings.reload_anim;
 			
 		bool reloaded = self.DefaultReload( settings.clip_size(), reloadAnim, settings.reload_time, 0 );
-
-		//Set 3rd person reloading animation -Sniper
-		BaseClass.Reload();
 		
 		if (reloaded)
 		{
-			settings.reload_snd.play(self.m_pPlayer, CHAN_STATIC);
+			CancelZoom();
+			settings.reload_snd.play(self.m_pPlayer, CHAN_VOICE);
 			unhideLaserTime = WeaponTimeBase() + settings.reload_time;
 		}
+		
+		//Set 3rd person reloading animation -Sniper
+		BaseClass.Reload();
 	}
 
 	void WeaponIdle()
 	{
-		if (beamStartTime + minBeamTime < g_Engine.time)
+		if (beam_active and beamStartTime + minBeamTime < g_Engine.time)
 		{
-			DestroyBeams();
-			beam_active = false;
+			CancelBeam();
+		}
+		
+		if (nextCooldownSound != 0 and nextCooldownSound < g_Engine.time)
+		{
+			nextCooldownSound = 0;
+			
+			WeaponSound@ snd = active_opts.getRandomCooldownSound();
+			@lastCooldownSnd = @snd;
+			if (lastCooldownSnd !is null)
+				snd.play(self.m_pPlayer, CHAN_VOICE);
 		}
 		
 		//println("FRAMERATE: " + self.pev.animtime);
