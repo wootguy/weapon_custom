@@ -18,7 +18,7 @@
 	
 	primary_fire(string) : "Primary Fire"
 	primary_alt_fire(string) : "Primary Alternate Fire"
-	primary_reload_snd(string) : "Primary Reload Sound" : ""
+	//primary_reload_snd(string) : "Primary Reload Sound" : ""
 	primary_empty_snd(string) : "Primary Empty Sound" : ""
 	primary_ammo(string) : "Primary Ammo Type" : ""
 	primary_regen_time(string) : "Primary Ammo Regen Time" : "1"
@@ -54,6 +54,8 @@
 		2 : "Same As Secondary"
 	]
 	
+	projectile_max_alive(integer) : "Max Live Projectiles (0 = inf.)" : 0
+	
 	wpn_v_model(string) : "V_Model" : "models/hl/v_9mmar.mdl"
 	wpn_w_model(string) : "W_Model" : "models/hl/w_9mmar.mdl"
 	wpn_p_model(string) : "P_Model" : "models/hl/p_9mmar.mdl"
@@ -64,10 +66,10 @@
 	reload_empty_anim(string) : "Reload Empty Animation" : "-1"
 	
 	reload_start_time(string) : "Reload Continuous Start Time" : "0.5"
-	reload_end_time(string) : "Reload Continuous End Time" : "0.5"
 	reload_start_anim(string) : "Reload Continuous Start Animation" : ""
-	reload_end_anim(string) : "Reload Continuous End Animation" : ""
 	reload_start_snd(string) : "Reload Continuous Start Sound" : ""
+	reload_end_time(string) : "Reload Continuous End Time" : "0.5"
+	reload_end_anim(string) : "Reload Continuous End Animation" : ""
 	reload_end_snd(string) : "Reload Continuous End Sound" : ""
 	reload_ammo_amt(string) : "Reload Continuous Ammo Amount" : "1"
 	
@@ -129,11 +131,23 @@
 [
 	spawnflags(Flags) =
 	[
-		1 : "" : 0
+		1 : "No Underwater Effects" : 0
 	]
 	
 	targetname(target_source) : "Name"
+	friction(string) : "Delay (Seconds)" : "0"
 	message(string) : "Sound File"
+	sequence(choices) : "Sound Channel" : -1 =
+	[
+		-1 : "Default"
+		0 : "Auto"
+		1 : "Weapon"
+		2 : "Voice"
+		3 : "Item"
+		4 : "Body"
+		5 : "Stream"
+		6 : "Static"
+	]
 	skin(choices) : "Play Mode" : 1 =
 	[
 		1 : "Default"
@@ -144,14 +158,14 @@
 	[
 		1 : "Small"
 		2 : "Medium"
-		3 : "Large"
-		4 : "Everywhere"
+		3 : "Large (Gunshot)"
+		4 : "Very Large (Explosion)"
+		5 : "Everywhere"
 	]
 	health(string) : "Volume (1-100)" : "100"
 	rendermode(string) : "Pitch (1-255)" : "100"
 	renderfx(string) : "Pitch Variation (0-100)" : "0"
-	friction(string) : "Delay (Seconds)" : "0"
-	noise(string) : "Linked Sound" : ""
+	noise(string) : "Next Sound" : ""
 ]
 
 @BaseClass = ShootGeneral
@@ -163,7 +177,7 @@
 		4 : "No Sound Overlap" : 0 // stop melee hit+swing and bullet channel switching
 		8 : "Responsive Windup" : 0
 		16 : "Partial Ammo Shooting" : 0
-		32 : "" : 0
+		32 : "Quake Muzzle Flash" : 0
 		64 : "No Projectile Gravity" : 0
 		128 : "No Projectile Orienting" : 0
 		256 : "Works in water" : 0
@@ -171,12 +185,92 @@
 		1024 : "Detonate Satchels" : 0
 	]
 	targetname(target_source) : "Name"
+	damage_amt(string) : "Damage" : "0"
+	damage_type(choices) : "Damage Type" : -1 =
+	[
+		-1 : "Default"
+		1048576 : "Acid"
+		64 : "Blast"
+		2 : "Bullet"
+		8 : "Burn"
+		128 : "Club"
+		1 : "Crush"
+		16384 : "Drown"
+		524288 : "Drown Recover"
+		1024 : "Energy Beam"
+		32 : "Fall"
+		16 : "Freeze"
+		0 : "Generic"
+		67108864 : "Launch"
+		33554432 : "Medkit Heal"
+		8388608 : "Mortar"
+		65536 : "Nerve Gas"
+		32768 : "Paralyze"
+		131072 : "Poison"
+		262144 : "Radiation"
+		256 : "Shock"
+		134217728 : "Shock Glow"
+		4 : "Slash"
+		2097152 : "Slow Burn"
+		4194304 : "Slow Freeze"
+		16777216 : "Sniper"
+		512 : "Sonic"
+		// 4096 never gib
+		// 8192 always gib
+		// 4294950912 timed based
+		// 993 gib corpse
+		// 7815448 show on hud
+	]
+	damage_type2(choices) : "Damage Type 2" : 0 =
+	[
+		0 : "None"
+		1048576 : "Acid"
+		64 : "Blast"
+		2 : "Bullet"
+		8 : "Burn"
+		128 : "Club"
+		1 : "Crush"
+		16384 : "Drown"
+		524288 : "Drown Recover"
+		1024 : "Energy Beam"
+		32 : "Fall"
+		16 : "Freeze"
+		67108864 : "Launch"
+		33554432 : "Medkit Heal"
+		8388608 : "Mortar"
+		65536 : "Nerve Gas"
+		32768 : "Paralyze"
+		131072 : "Poison"
+		262144 : "Radiation"
+		256 : "Shock"
+		134217728 : "Shock Glow"
+		4 : "Slash"
+		2097152 : "Slow Burn"
+		4194304 : "Slow Freeze"
+		16777216 : "Sniper"
+		512 : "Sonic"
+		//-2 : ""
+		//4096 : "Never Gib"
+		//8192 : "Always Gib"
+		//4294950912 : "Time Based"
+		//993 : "Gib Corpse"
+		//7815448 : "Show On Hud"
+	]
+	gib_type(choices) : "Gib Mode" : 0 =
+	[
+		0 : "Normal"
+		4096 : "Never Gib"
+		8192 : "Always Gib"
+	]
 	sounds(string) : "Shoot Sounds" : ""
 	shoot_anims(string) : "Shoot Animations" : ""
 	shoot_empty_anim(string) : "Shoot Empty Animation" : "-1"
+	shoot_empty_snd(string) : "Shoot Empty Sound" : ""
 	shoot_fail_snds(string) : "Shoot Failure Sounds" : ""
 	ammo_cost(string) : "Ammo Cost" : "1"
 	cooldown(string) : "Cooldown" : "0.15"
+	cooldown_sounds(string) : "Cooldown Sounds" : ""
+	cooldown_sound_delay(string) : "Cooldown Sound Delay" : "0.4"
 	recoil(string) : "Recoil (Min Max)" : "-2 2"
 	kickback(string) : "Kickback (User Push)" : "0"
 	knockback(string) : "Knockback (Target Push)" : "10"
@@ -204,15 +298,8 @@
 	rico_angle(string) : "Ricochet Max Angle (Degrees)" : "0"
 	muzzle_flash_color(string) : "Muzzle Flash Color (R G B)" : "255 200 200"
 	muzzle_flash_adv(string) : "Muzzle Flash Adv. (Size Life Decay)" : "12 1 0"
-]
-
-@BaseClass = ShootName
-[
-	targetname(target_source) : "Name"
-]
-
-@BaseClass = ShootBullet
-[
+	
+	// Advanced
 	shell_type(choices) : "Shell Ejection Type" : 0 =
 	[
 		0 : "None"
@@ -227,8 +314,58 @@
 	shell_delay(string) : "Shell Ejection Delay" : "0"
 	shell_delay_snd(string) : "Shell Ejection Delay Sound" : ""
 	
+	windup_time(string) : "Wind Up Time" : "0"
+	windup_min_time(string) : "Min Responsive Wind Up Time" : "0"
+	wind_down_time(string) : "Wind Down Time" : "0"
+	windup_action(choices) : "Wind Up Action" : 0 =
+	[	
+		0 : "Shoot On Release"
+		1 : "Shoot Once"
+		2 : "Shoot Constant"
+		3 : "Shoot Once If Held"
+	]
+	windup_cost(string) : "Wind Up Ammo Cost" : "0"
+	windup_mult(string) : "Wind Up Damage Multiplier" : "3"
+	windup_kick_mult(string) : "Wind Up Kickback Multiplier" : "3"
+	windup_easing(choices) : "Wind Up Easing" : 0 =
+	[	
+		0 : "None"
+		1 : "Ease In"
+		2 : "Ease Out"
+		3 : "Ease In + Ease Out"
+		4 : "Ease In (Heavy)"
+		5 : "Ease Out (Heavy)"
+		6 : "Ease In + Ease Out (Heavy)"
+	]
+	windup_snd(string) : "Wind Up Sound" : ""
+	windup_pitch_start(string) : "Wind Up Pitch Start (0-255)" : "90"
+	windup_pitch_end(string) : "Wind Up Pitch End (0-255)" : "130"
+	windup_anim(string) : "Wind Up Animation" : "0"
+	windup_anim_time(string) : "Wind Up Animation Time" : "1"
+	windup_anim_loop(string) : "Wind Up Loop Animation" : "-1"
+	windup_overcharge_time(string) : "Wind Up Overcharge Time" : "0"
+	windup_overcharge_action(choices) : "Wind Up Overcharge Action" : 0 =
+	[	
+		0 : "Continue Windup"
+		1 : "Cancel Windup"
+		2 : "Cancel Windup + Shoot"
+	]
+	user_effect2(string) : "Wind Up Overcharge Effect" : ""
+	windup_overcharge_anim(string) : "Wind Up Overcharge Animation" : "-1"
+	windup_overcharge_cooldown(string) : "Wind Up Overcharge Cooldown" : "1"
+	wind_down_anim(string) : "Wind Down Animation" : "0"
+	toggle_snd(string) : "Toggle Sound" : ""
+	toggle_txt(string) : "Toggle Text" : ""
+]
+
+@BaseClass = ShootName
+[
+	targetname(target_source) : "Name"
+]
+
+@BaseClass = ShootBullet
+[
 	bullets(integer) : "Bullets" : 1
-	bullet_damage(string) : "Bullet Custom Damage" : 10
 	bullet_spread(string) : "Bullet Spread (Degrees)" : "6"
 	bullet_spread_func(choices) : "Bullet Spread Function" : 0 =
 	[
@@ -318,7 +455,6 @@
 		0 : "Gaussian"
 		1 : "Uniform"
 	]
-	bullet_damage(string) : "Melee Damage" : 10
 	bullet_delay(string) : "Melee Burst Fire Delay" : "0"
 	bullet_impact(choices) : "Impact Mode" : 0 =
 	[
@@ -396,7 +532,6 @@
 	hook_force(string) : "Hook Pull Force" : "800"
 	hook_max_speed(string) : "Hook Max User Speed" : "800"
 	projectile_speed(string) : "Hook Projectile Speed" : "800"
-	projectile_impact_dmg(string) : "Hook Projectile Impact Damage" : "0"
 	hook_sound(string) : "Hook Extend Sound" : ""
 	hook_anim(string) : "Hook Extend Animation" : ""
 	hook_delay(string) : "Hook Extend Anim/Sound Delay" : ""
@@ -422,48 +557,60 @@
 
 @BaseClass = ShootProjectile
 [
-	projectile_type(choices) : "Projectile" : 0 =
+	projectile_type(choices) : "Projectile" : 1 =
 	[
-		0 : "AR Grenade"
-		1 : "Banana Grenade"
-		2 : "Crossbow Bolt"
-		3 : "Displacer Portal"
-		4 : "Grenade"
-		5 : "Hornet"
-		6 : "HVR Rocket"
-		7 : "Mortar"
-		8 : "RPG Rocket"
-		9 : "Shock Rifle Beam"
-		10 : "Throw Weapon"
-		11 : "Custom"
-		12 : "Other"
+		1 : "AR Grenade"
+		2 : "Banana Grenade"
+		3 : "Crossbow Bolt"
+		4 : "Displacer Portal"
+		5 : "Grenade"
+		6 : "Hornet"
+		7 : "HVR Rocket"
+		8 : "Mortar"
+		9 : "RPG Rocket"
+		10 : "Shock Rifle Beam"
+		11 : "Throw Weapon"
+		12 : "Custom"
+		13 : "Other"
 	]
 	projectile_class(string) : "Projectile Entity (Other)"
 	projectile_speed(string) : "Projectile Speed" : "900"
+	projectile_water_friction(string) : "Projectile Water Friction (0 - 1)" : "0"
 	projectile_angles(string) : "Projectile Angles (X Y Z)" : "0 0 0"
 	projectile_avel(string) : "Projectile Angular Velocity (X Y Z)" : "0 0 0"
+	projectile_offset(string) : "Projectile Offset (RT UP FW)" : "6 0 16"
+	projectile_player_vel_inf(string) : "Projectile Plyr. Vel. Influence (R U F)" : "0 0 0"
 	projectile_life(string) : "Projectile Life Time" : "4"
 	projectile_mdl(string) : "Projectile Model"
 	projectile_snd(string) : "Projectile Movement Sound"
 	projectile_spr(string) : "Projectile Sprite"
+	projectile_follow_mode(choices) : "Projectile Follow Behavior" : 0 =
+	[
+		0 : "None"
+		1 : "Follow Crosshairs"
+		2 : "Follow Nearby Enemies"
+	]
+	projectile_follow_radius(string) : "Projectile Follow Radius (0 = inf.)" : "0"
+	projectile_follow_angle(string) : "Projectile Follow Turn Angle (0 - 360)" : "30"
+	projectile_follow_time(string) : "Projectile Follow Delay + Dur. + Freq." : "0 0 0.1"
 	projectile_trail_spr(string) : "Projectile Trail Sprite"
 	projectile_trail_life(integer) : "Projectile Trail Life (1-255)" : 100
 	projectile_trail_width(integer) : "Projectile Trail Width (1-255)" : 32
 	projectile_trail_color(color255) : "Projectile Trail Color (R G B A)" : "255 255 0 255"
 	projectile_size(string) : "Projectile Hull Size" : "4"
 	effect3_name(string) : "Projectile Custom Life Expired Effect" : ""
-	projectile_world_event(choices) : "Projectile Custom Hit World Action" : 0 =
+	projectile_world_event(choices) : "Projectile Custom Hit World Action" : 1 =
 	[
-		0 : "Impact"
-		1 : "Bounce"
-		2 : "Attach"
+		1 : "Impact"
+		2 : "Bounce"
+		3 : "Attach"
 	]
 	effect1_name(string) : "Projectile Custom Hit World Effect" : ""
-	projectile_monster_event(choices) : "Projectile Custom Hit Monster Action" : 0 =
+	projectile_monster_event(choices) : "Projectile Custom Hit Monster Action" : 1 =
 	[
-		0 : "Impact"
-		1 : "Bounce"
-		2 : "Attach"
+		1 : "Impact"
+		2 : "Bounce"
+		3 : "Attach"
 	]
 	effect2_name(string) : "Projectile Custom Hit Monster Effect" : ""
 	projectile_bounce(string) : "Projectile Custom Elasticity (0-1)" : "0.9"
@@ -472,7 +619,11 @@
 
 @BaseClass = ShootBeam
 [
+	beam_impact_speed(string) : "Beam Impact Frequency" : "0.1"
 	beam_impact_spr(string) : "Beam Impact Sprite" : ""
+	beam_impact_spr_scale(integer) : "Beam Impact Sprite Scale (0 - 255)" : 1
+	beam_impact_spr_fps(integer) : "Beam Impact Sprite FPS (0 - 255)" : 10
+	beam_impact_spr_opacity(integer) : "Beam Impact Sprite Opacity (0 - 255)" : 255
 	beam_ricochet_limit(integer) : "Beam Ricochet Limit" : 3
 	beam1_type(choices) : "Beam 1 Type" : 0 =
 	[
@@ -483,11 +634,24 @@
 		4 : "Projectile"
 	]
 	beam1_time(string) : "Beam 1 Duration (0 = constant)" : "0"
-	beam1_spr(string) : "Beam 1 Sprite" : ""
+	beam1_spr(string) : "Beam 1 Sprite" : "sprites/laserbeam.spr"
 	beam1_color(color255) : "Beam 1 Color (R G B A)" : "255 0 0 255"
 	beam1_width(integer) : "Beam 1 Width (1-255)" : 8
 	beam1_noise(integer) : "Beam 1 Noise (0-255)" : 32
 	beam1_scroll(integer) : "Beam 1 Scroll Rate (0-255)" : 32
+
+	beam1_alt_color(color255) : "Beam 1 Alt Color (R G B A)" : "255 0 0 255"
+	beam1_alt_width(integer) : "Beam 1 Alt Width (1-255)" : 8
+	beam1_alt_noise(integer) : "Beam 1 Alt Noise (0-255)" : 32
+	beam1_alt_scroll(integer) : "Beam 1 Alt Scroll Rate (0-255)" : 32
+	beam1_alt_type(choices) : "Beam 1 Alt Interpolation" : -1 =
+	[
+		-1 : "Disabled"
+		1 : "Immediate (No Interp.)"
+		2 : "Linear"
+		3 : "Ease In + Ease Out"	
+	]
+	beam1_alt_speed(string) : "Beam 1 Alt Interpolation Time" : "1"
 	
 	beam2_type(choices) : "Beam 2 Type" : -1 =
 	[
@@ -504,39 +668,25 @@
 	beam2_width(integer) : "Beam 2 Width (1-255)" : 8
 	beam2_noise(integer) : "Beam 2 Noise (0-255)" : 32
 	beam2_scroll(integer) : "Beam 2 Scroll Rate (0-255)" : 32
-]
-
-@BaseClass = ShootAdvanced
-[
-	windup_time(string) : "Wind Up Time" : "0"
-	windup_min_time(string) : "Min Responsive Wind Up Time" : "0"
-	wind_down_time(string) : "Wind Down Time" : "0"
-	windup_action(choices) : "Wind Up Action" : 0 =
-	[	
-		0 : "Shoot On Release"
-		1 : "Shoot Once"
-		2 : "Shoot Constant"
-		3 : "Shoot Once If Held"
+	
+	beam2_alt_color(color255) : "Beam 2 Alt Color (R G B A)" : "255 0 0 255"
+	beam2_alt_width(integer) : "Beam 2 Alt Width (1-255)" : 8
+	beam2_alt_noise(integer) : "Beam 2 Alt Noise (0-255)" : 32
+	beam2_alt_scroll(integer) : "Beam 2 Alt Scroll Rate (0-255)" : 32
+	beam2_alt_type(choices) : "Beam 2 Alt Interpolation" : -1 =
+	[
+		-1 : "Disabled"
+		1 : "Immediate (No Interp.)"
+		2 : "Linear"
+		3 : "Ease In + Ease Out"	
+		4 : "Random"	
 	]
-	windup_cost(string) : "Wind Up Ammo Cost" : "0"
-	windup_mult(string) : "Wind Up Damage Multiplier" : "3"
-	windup_easing(choices) : "Wind Up Easing" : 0 =
-	[	
-		0 : "None"
-		1 : "Ease In"
-		2 : "Ease Out"
-		3 : "Ease In + Ease Out"
-		4 : "Ease In (Heavy)"
-		5 : "Ease Out (Heavy)"
-		6 : "Ease In + Ease Out (Heavy)"
-	]
-	windup_snd(string) : "Wind Up Sound" : ""
-	windup_pitch_start(string) : "Wind Up Pitch Start (0-255)" : "90"
-	windup_pitch_end(string) : "Wind Up Pitch End (0-255)" : "130"
-	windup_anim(string) : "Wind Up Animation" : "0"
-	wind_down_anim(string) : "Wind Down Animation" : "0"
-	toggle_snd(string) : "Toggle Sound" : ""
-	toggle_txt(string) : "Toggle Text" : ""
+	beam2_alt_speed(string) : "Beam 2 Alt Interpolation Time" : "1"
+	
+	hook_sound(string) : "Constant Beam Sound" : ""
+	//hook_anim(string) : "Hook Extend Animation" : ""
+	hook_delay(string) : "Constant Beam Sound Delay" : ""
+	hook_sound2(string) : "Constant Beam End Sound" : ""
 ]
 
 @BaseClass = ShootEffects
@@ -544,22 +694,22 @@
 	spawnflags(Flags) =
 	[
 		1 : "Explosion" : 0
-		2 : "Ricochet" : 0
+		2 : "Armor Ricochet" : 0
 		4 : "Sparks" : 0
+		8 : "Dynamic Lights" : 0
+		16 : "Bubbles Outside Water" : 0
+		32 : "Gunshot Ricochet" : 0
+		64 : "Quake Explosion" : 0
+		128 : "Quake Explosion 2" : 0
+		256 : "Quake Particle Burst" : 0
+		512 : "Quake Lava Splash" : 0
+		1024 : "Quake Teleport" : 0
+		
 	]
 	
-	sounds(string) : "Sounds" : ""
-	explosion_style(choices) : "Custom Explosion Style" : 0 =
-	[
-		0 : "Sprite"
-		1 : "Disk"
-		2 : "Cylinder"
-		3 : "Torus"
-	]
-	explode_mag(string) : "Custom Explosion Size" : "100"
-	explode_dmg(string) : "Custom Explosion Damage" : "100"
-	explode_spr(string) : "Custom Explosion Sprite" : ""
-	explode_decal(choices) : "Custom Explosion Decal" : 24 =
+	delay(string) : "Delay" : ""
+	next_effect(string) : "Next Effect" : ""
+	rico_decal(choices) : "Decal" : 24 =
 	[	
 		-2 : "None"
 		24 : "Bullet"
@@ -605,11 +755,121 @@
 		31 : "Tire Tracks"
 		-1 : "Player Spray"
 	]
-	explode_smoke_spr(string) : "Custom Explosion Smoke Sprite" : ""
-	explode_dlight(color255) : "Custom Explosion Light (R G B D)" : "0 255 0 200"
-	explode_gibs(integer) : "Custom Explosion Gibs (0-255)" : 8
-	explode_gib_model(string) : "Custom Explosion Gib Model/Sprite" : ""
-	explode_gib_mat(choices) : "Custom Explosion Gib Material" : 0 =
+	sounds(string) : "Sounds" : ""
+	explosion_style(choices) : "Explosion Style" : 0 =
+	[
+		0 : "Sprite + Particles"
+		1 : "Sprite"
+		2 : "Disk"
+		3 : "Cylinder"
+		4 : "Torus"
+	]
+	explode_radius(string) : "Explosion Damage Radius" : "100"
+	explode_dmg(string) : "Explosion Damage" : "100"
+	damage_type(choices) : "Explosion Damage Type" : 64 =
+	[
+		1048576 : "Acid"
+		64 : "Blast"
+		2 : "Bullet"
+		8 : "Burn"
+		128 : "Club"
+		1 : "Crush"
+		16384 : "Drown"
+		524288 : "Drown Recover"
+		1024 : "Energy Beam"
+		32 : "Fall"
+		16 : "Freeze"
+		0 : "Generic"
+		67108864 : "Launch"
+		33554432 : "Medkit Heal"
+		8388608 : "Mortar"
+		65536 : "Nerve Gas"
+		32768 : "Paralyze"
+		131072 : "Poison"
+		262144 : "Radiation"
+		256 : "Shock"
+		134217728 : "Shock Glow"
+		4 : "Slash"
+		2097152 : "Slow Burn"
+		4194304 : "Slow Freeze"
+		16777216 : "Sniper"
+		512 : "Sonic"
+	]
+	damage_type2(choices) : "Explosion Damage Type 2" : 0 =
+	[
+		0 : "None"
+		1048576 : "Acid"
+		64 : "Blast"
+		2 : "Bullet"
+		8 : "Burn"
+		128 : "Club"
+		1 : "Crush"
+		16384 : "Drown"
+		524288 : "Drown Recover"
+		1024 : "Energy Beam"
+		32 : "Fall"
+		16 : "Freeze"
+		67108864 : "Launch"
+		33554432 : "Medkit Heal"
+		8388608 : "Mortar"
+		65536 : "Nerve Gas"
+		32768 : "Paralyze"
+		131072 : "Poison"
+		262144 : "Radiation"
+		256 : "Shock"
+		134217728 : "Shock Glow"
+		4 : "Slash"
+		2097152 : "Slow Burn"
+		4194304 : "Slow Freeze"
+		16777216 : "Sniper"
+		512 : "Sonic"
+	]
+	gib_type(choices) : "Explosion Damage Gib Mode" : 8192 =
+	[
+		0 : "Normal"
+		4096 : "Never Gib"
+		8192 : "Always Gib"
+	]
+	explode_offset(string) : "Explosion Offset" : "0"
+	explode_spr(string) : "Explosion Sprite" : ""
+	explode_spr_scale(string) : "Explosion Sprite Scale (0 - 25.5)" : "1"
+	explode_spr_fps(string) : "Explosion Sprite FPS (0 - 255)" : "5"
+	
+	explode_water_spr(string) : "Explosion Water Sprite" : ""
+	
+	explode_smoke_spr(string) : "Explosion Smoke Sprite" : ""
+	explode_smoke_spr_scale(string) : "Explosion Smoke Scale (0 - 25.5)" : "1"
+	explode_smoke_spr_fps(string) : "Explosion Smoke FPS (0 - 255)" : "5"
+	explode_smoke_delay(string) : "Explosion Smoke Delay" : "0.2"
+	
+	explode_beam_radius(string) : "Explosion Beam Radius" : "512"
+	explode_beam_width(integer) : "Explosion Beam Width (0 - 255)" : 16
+	explode_beam_life(integer) : "Explosion Beam Life (0 - 255)" : 8
+	explode_beam_noise(integer) : "Explosion Beam Noise (0 - 255)" : 0
+	explode_beam_color(color255) : "Explosion Beam Color (R G B A)" : "255 255 255 255"
+	explode_beam_frame(integer) : "Explosion Beam Sprite Frame" : 0
+	
+	// Framerate and scrollrate have no effect on any of the beam types?
+	//explode_beam_fps(integer) : "Explosion Beam Framerate (0 - 255)" : 0
+	//explode_beam_scroll(integer) : "Explosion Beam Scrollrate (0 - 255)" : 0
+	
+	explode_bubbles(integer) : "Bubble Count" : 0
+	explode_bubble_mins(string) : "Bubble Mins" : "-16 -16 -16"
+	explode_bubble_maxs(string) : "Bubble Maxs" : "16 16 16"
+	explode_bubble_delay(string) : "Bubble Delay" : "0.4"
+	explode_bubble_speed(string) : "Bubble Speed" : "16"
+	explode_bubble_spr(string) : "Bubble Custom Sprite" : ""
+	
+	explode_light_color(color255) : "Dynamic Light 1 Color (R G B)" : "0 255 0"
+	explode_light_adv(string) : "Dynamic Light 1 Adv. (S L D)" : "64 4 128"
+	explode_light_color2(color255) : "Dynamic Light 2 Color (R G B)" : "0 255 0"
+	explode_light_adv2(string) : "Dynamic Light 2 Adv. (S L D)" : "64 4 128"
+	
+	explode_gibs(integer) : "Gibs (0 - 255)" : 8
+	explode_gib_speed(integer) : "Gib Speed" : 128
+	explode_gib_rand(integer) : "Gib Randomness (0 - 255)" : 16
+	explode_gib_model(string) : "Gib Model/Sprite" : ""
+	explode_gib_mat(choices) : "Gib Material" : 0 =
 	[
 		0 : "None"
 		1 : "Glass"
@@ -618,86 +878,187 @@
 		8 : "Wood"
 		64 : "Rock"
 	]
-	
-	rico_decal(choices) : "Ricochet Decal" : 24 =
-	[	
-		-2 : "None"
-		24 : "Bullet"
-		1 : "Bullet (Large)"
-		15 : "Bullet (Huge)" // gaussshot
-		5 : "Bullet (Breakable Glass)"
-		4 : "Bullet (Bulletproof Glass)"
-		
-		-2 : ""
-		2 : "Red Blood"
-		0 : "Red Blood (Large)"
-		3 : "Red Blood Hands"
-		32 : "Yellow Blood"
-		29 : "Yellow Blood (Large)"
-		28 : "Bullsquid Spit"
-		18 : "Big Momma Goo"			
-		22 : "Oil"
-		
-		-2 : ""
-		7 : "Small Crack"
-		8 : "Large Crack"
-		9 : "Large Dent"
-		10 : "Small Dent"
-		11 : "Small Ding"
-		12 : "Rust"
-		
-		-2 : ""
-		21 : "Tiny Scortch"
-		26 : "Tiny Scortch 2"
-		19 : "Small Scortch"
-		27 : "Small Scortch 2"
-		20 : "Medium Scortch"
-		23 : "Large Scortch"
-		14 : "Garg Stomp"
-		
-		-2 : ""
-		13 : "Footprints"
-		6 : "Alphabet"
-		25 : "Numbers"
-		//16 : "Grafitti"
-		//17 : "Handicap Sign"
-		//30 : "Target"
-		31 : "Tire Tracks"
-		-1 : "Player Spray"
+	explode_gib_effects(choices) : "Gib Effects" : 0 =
+	[
+		0 : "None"
+		16 : "Smoke Trails"
+		32 : "Transparent"
+		48 : "Smoke Trails + Transparent"
 	]
-	rico_part_count(integer) : "Ricochet Particle Count" : 3
-	rico_part_spr(string) : "Ricochet Particle Sprite" : ""
-	rico_part_scale(integer) : "Ricochet Particle Scale (1-255)" : 1
-	rico_part_speed(integer) : "Ricochet Particle Speed (0-255)" : 32
-	rico_trace_count(integer) : "Ricochet Tracers" : 3
-	rico_trace_color(integer) : "Ricochet Tracer Color (0-255)" : 4
-	rico_trace_speed(integer) : "Ricochet Tracer Speed (0-6000)" : 1024
+	
+	
+	rico_part_count(integer) : "Particle Count" : 0
+	rico_part_spr(string) : "Particle Sprite" : ""
+	rico_part_scale(integer) : "Particle Scale (1-255)" : 1
+	rico_part_speed(integer) : "Particle Speed (0-255)" : 32
+	rico_trace_count(integer) : "Tracers" : 0
+	rico_trace_color(integer) : "Tracer Color (0-255)" : 4
+	rico_trace_speed(integer) : "Tracer Speed (0-6000)" : 1024
+	rico_trace_rand(integer) : "Tracer Randomness (0-6000)" : 256
+	
+	glow_spr(string) : "Glow Sprite" : ""
+	glow_spr_scale(string) : "Glow Sprite Scale (0 - 255)" : "10"
+	glow_spr_life(string) : "Glow Sprite Life (0 - 255)" : "0"
+	glow_spr_opacity(string) : "Glow Sprite Opacity (0 - 255)" : "200"
+	
+	spray_count(integer) : "Spray Count" : 0
+	spray_sprite(string) : "Spray Sprite" : ""
+	spray_speed(integer) : "Spray Speed (0 - 255)" : 216
+	spray_rand(integer) : "Spray Randomness (0 - 255)" : 32
+	
+	burst_life(integer) : "Particle Burst Duration (0 - 255)" : 8
+	burst_radius(integer) : "Particle Burst Radius (0 - 32768)" : 128
+	burst_color(integer) : "Particle Burst Color Index (0 - 255)" : 242
+	
+	implode_count(integer) : "Implosion Tracer Count (0 - 255)" : 0
+	implode_radius(integer) : "Implosion Radius (0 - 255)" : 255
+	implode_life(integer) : "Implosion Duration (0 - 255)" : 4
+	
+	shake_radius(string) : "Shake Radius" : "0"
+	shake_amp(string) : "Shake Amplitude" : "0"
+	shake_freq(string) : "Shake Frequency" : "0"
+	
+	rico_scale(integer) : "Armor Ricochet Scale (0 - 255)" : 0
 ]
 
 
-@PointClass size(-32 -8 -8, 32 8 8 ) color(255 216 0) base(ShootGeneral, ShootBullet, ShootMeleePartial, ShootProjectile, ShootBeam, ShootEffects, ShootAdvanced) = weapon_custom_shoot : "Custom weapon shoot event"[]
+@PointClass size(-8 -8 -8, 8 8 8 ) color(0 255 160) = weapon_custom_user_effect : "Custom weapon client effect"
+[
+	spawnflags(Flags) =
+	[
+		1 : "User Only Sounds" : 0
+	]
+	
+	targetname(target_source) : "Name"
+	delay(string) : "Delay (Seconds)" : "0"
+	next_effect(string) : "Next Effect" : ""
+	sounds(string) : "Sounds" : ""
+	self_damage(string) : "Damage" : "0"
+	damage_type(choices) : "Damage Type" : 1048576 =
+	[
+		1048576 : "Acid"
+		64 : "Blast"
+		2 : "Bullet"
+		8 : "Burn"
+		128 : "Club"
+		1 : "Crush"
+		16384 : "Drown"
+		524288 : "Drown Recover"
+		1024 : "Energy Beam"
+		32 : "Fall"
+		16 : "Freeze"
+		0 : "Generic"
+		67108864 : "Launch"
+		33554432 : "Medkit Heal"
+		8388608 : "Mortar"
+		65536 : "Nerve Gas"
+		32768 : "Paralyze"
+		131072 : "Poison"
+		262144 : "Radiation"
+		256 : "Shock"
+		134217728 : "Shock Glow"
+		4 : "Slash"
+		2097152 : "Slow Burn"
+		4194304 : "Slow Freeze"
+		16777216 : "Sniper"
+		512 : "Sonic"
+	]
+	damage_type2(choices) : "Damage Type 2" : 0 =
+	[
+		0 : "None"
+		1048576 : "Acid"
+		64 : "Blast"
+		2 : "Bullet"
+		8 : "Burn"
+		128 : "Club"
+		1 : "Crush"
+		16384 : "Drown"
+		524288 : "Drown Recover"
+		1024 : "Energy Beam"
+		32 : "Fall"
+		16 : "Freeze"
+		67108864 : "Launch"
+		33554432 : "Medkit Heal"
+		8388608 : "Mortar"
+		65536 : "Nerve Gas"
+		32768 : "Paralyze"
+		131072 : "Poison"
+		262144 : "Radiation"
+		256 : "Shock"
+		134217728 : "Shock Glow"
+		4 : "Slash"
+		2097152 : "Slow Burn"
+		4194304 : "Slow Freeze"
+		16777216 : "Sniper"
+		512 : "Sonic"
+	]
+	gib_type(choices) : "Damage Gib Mode" : 8192 =
+	[
+		0 : "Normal"
+		4096 : "Never Gib"
+		8192 : "Always Gib"
+	]
+	add_angle(string) : "Add Angles (X Y Z)" : "0 0 0"
+	add_angle_time(string) : "Add Angle Time" : "1"
+	punch_angle(string) : "Punch Angle (X Y Z)" : "0 0 0"
+	push_vel(string) : "Push Velocity (RT UP FW)" : "0 0 0"
+	action_sprite(string) : "Overhead Sprite" : ""
+	action_sprite_height(string) : "Overhead Sprite Height" : "51"
+	action_sprite_time(string) : "Overhead Sprite Time" : "2.5"
+	anim(string) : "Player Animation" : "-1"
+	anim_speed(string) : "Player Animation Speed" : "1"
+	anim_frame(string) : "Player Animation Start Frame" : "0"
+	
+	fade_mode(choices) : "Fade Mode" : -1 =
+	[
+		-1: "No Fade"
+		0 : "Fade Out"
+		1 : "Fade In"
+		2 : "Modulate + Fade Out"
+		3 : "Modulate + Fade In"
+	]
+	fade_color(color255) : "Fade Color (R G B A)" : "255 255 255 255"
+	fade_hold(string) : "Fade Hold Time (seconds)" : "0"	
+	fade_time(string) : "Fade Duration (seconds)" : "2"
+	
+	player_sprite_count(string) : "Player Sprites Count (0 - 255)" : "0"
+	player_sprite(string) : "Player Sprites Sprite" : ""
+	player_sprite_freq(string) : "Player Sprites Frequency" : "0.3"
+	player_sprite_time(string) : "Player Sprites Duration" : "2"
+	
+	glow_time(string) : "Glow Duration" : "0"
+	glow_amt(string) : "Glow Thickness (0 - 255)" : "0"
+	glow_color(color255) : "Glow Color (R G B)" : "255 0 0"
+]
 
-@PointClass size(-32 -8 -8, 32 8 8 ) color(255 216 0) base(ShootGeneral, ShootAdvanced, ShootBullet) = weapon_custom_bullet : "Custom weapon Bullet event"
+
+@PointClass size(-32 -8 -8, 32 8 8 ) color(255 216 0) base(ShootGeneral, ShootBullet) = weapon_custom_bullet : "Custom weapon bullet"
 [
 	effect1_name(string) : "Bullet Impact Effect" : ""
+	user_effect1(string) : "User Effect (Shoot)" : ""
 ]
 
-@PointClass size(-32 -8 -8, 32 8 8 ) color(255 64 64) base(ShootGeneral, ShootAdvanced, ShootMelee) = weapon_custom_melee : "Custom weapon Bullet event"
+@PointClass size(-32 -8 -8, 32 8 8 ) color(255 64 64) base(ShootGeneral, ShootMelee) = weapon_custom_melee : "Custom weapon melee"
 [
 	effect1_name(string) : "Melee Impact Effect" : ""
+	user_effect1(string) : "User Effect (Shoot)" : ""
 ]
 
-@PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootAdvanced, ShootProjectile) = weapon_custom_projectile : "Custom weapon Bullet event"
+@PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootProjectile) = weapon_custom_projectile : "Custom weapon projectile"
 [
 	effect1_name(string) : "Impact Effect" : ""
+	user_effect1(string) : "User Effect (Shoot)" : ""
 ]
 
-@PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootAdvanced, ShootBeam) = weapon_custom_beam : "Custom weapon Bullet event"
+@PointClass size(-32 -8 -8, 32 8 8 ) color(0 128 255) base(ShootGeneral, ShootBeam) = weapon_custom_beam : "Custom weapon beam"
 [
 	effect1_name(string) : "Impact Effect" : ""
+	effect2_name(string) : "Ricochet Effect" : ""
+	
+	user_effect1(string) : "User Effect On Shoot" : ""
 ]
 
-@PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 0) base(ShootName, ShootEffects) = weapon_custom_effect : "Custom weapon impact effects"
+@PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 0) base(ShootName, ShootEffects) = weapon_custom_effect : "Custom weapon effects"
 [
 
 ]

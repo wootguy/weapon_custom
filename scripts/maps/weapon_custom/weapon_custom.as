@@ -5,8 +5,25 @@
  * Defines and initializes the weapon_custom and weapon_custom_shoot entites.
  */
 
+void test()
+{
+	CBaseEntity@ ent = null;
+	do {
+		@ent = g_EntityFuncs.FindEntityByClassname(ent, "beam"); 
+
+		if (ent !is null)
+		{
+			CBeam@ beam = cast<CBeam@>(ent);
+			println("BEAM COLOR: " + beam.pev.rendercolor.ToString() + " " + beam.pev.renderamt + 
+					" WIDTH: " + beam.GetWidth() + " NOISE: " + beam.GetNoise());
+			// do nothing
+		}
+	} while (ent !is null);
+}
+ 
 void MapInit()
 {
+	g_Scheduler.SetInterval("test", 0.05);
 	WeaponCustomMapInit();
 	
 	// TODO: Fix really weird bug where manually placed weapons don't spawn.
@@ -19,16 +36,23 @@ void MapActivate()
 	WeaponCustomMapActive();
 }
 
+string g_watersplash_spr = "sprites/wep_smoke_01.spr";
+
 void WeaponCustomMapInit()
 {	
+	g_Game.PrecacheModel( g_watersplash_spr ); // used for water splash effect
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom", "weapon_custom" );
+	
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_shoot", "weapon_custom_shoot" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_bullet", "weapon_custom_bullet" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_melee", "weapon_custom_melee" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_projectile", "weapon_custom_projectile" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_beam", "weapon_custom_beam" );
+	
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_sound", "weapon_custom_sound" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_effect", "weapon_custom_effect" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_user_effect", "weapon_custom_user_effect" );
+	
 	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomProjectile", "custom_projectile" );
 }
 
@@ -100,6 +124,7 @@ void WeaponCustomMapActive()
 // Also let's us know which weapon slots are used (Auto weapon slot position depends on this)
 dictionary custom_weapons;
 dictionary custom_weapon_shoots;
+dictionary custom_weapon_effects;
 
 int MAX_BEAMS = 256; // any more and you get console spam and game freezes (acutal max is 258 or 259 I think)
 int REC_BEAMS = 8; // 8 * 32 players = 256
@@ -120,7 +145,7 @@ int FL_SHOOT_IF_NOT_MISS = 2;
 int FL_SHOOT_NO_MELEE_SOUND_OVERLAP = 4;
 int FL_SHOOT_RESPONSIVE_WINDUP = 8;
 int FL_SHOOT_PARTIAL_AMMO_SHOOT = 16;
-
+int FL_SHOOT_QUAKE_MUZZLEFLASH = 32;
 int FL_SHOOT_PROJ_NO_GRAV = 64;
 int FL_SHOOT_PROJ_NO_ORIENT = 128;
 int FL_SHOOT_IN_WATER = 256;
@@ -128,9 +153,23 @@ int FL_SHOOT_NO_AUTOFIRE = 512;
 int FL_SHOOT_DETONATE_SATCHELS = 1024;
 
 // shoot effect flags
-int FL_EFFECT_RICOCHET = 1;
-int FL_EFFECT_EXPLOSION = 2;
+int FL_EFFECT_EXPLOSION = 1;
+int FL_EFFECT_RICOCHET = 2;
 int FL_EFFECT_SPARKS = 4;
+int FL_EFFECT_LIGHTS = 8;
+int FL_EFFECT_BUBBLES_IN_AIR = 16;
+int FL_EFFECT_GUNSHOT_RICOCHET = 32;
+int FL_EFFECT_TARBABY = 64;
+int FL_EFFECT_TARBABY2 = 128;
+int FL_EFFECT_BURST = 256;
+int FL_EFFECT_LAVA = 512;
+int FL_EFFECT_TELEPORT = 1024;
+
+// User effect flags
+int FL_UEFFECT_USER_SOUNDS = 1;
+
+// shoot sound flags
+int FL_SOUND_NO_WATER_EFFECT = 1;
 
 float REVIVE_RADIUS = 64;
 
@@ -171,14 +210,14 @@ enum fire_mode
 
 enum projectile_action
 {
-	PROJ_ACT_IMPACT,
+	PROJ_ACT_IMPACT=1,
 	PROJ_ACT_BOUNCE,
 	PROJ_ACT_ATTACH
 }
 
 enum projectile_type
 {
-	PROJECTILE_ARGRENADE,
+	PROJECTILE_ARGRENADE=1,
 	PROJECTILE_BANANA,
 	PROJECTILE_BOLT,
 	PROJECTILE_DISPLACER,
@@ -205,6 +244,7 @@ enum beam_type
 
 enum explosion_types
 {
+	EXPLODE_SPRITE_PARTICLES,
 	EXPLODE_SPRITE,
 	EXPLODE_DISK,
 	EXPLODE_CYLINDER,
@@ -304,6 +344,20 @@ enum fire_actions
 	FIRE_ACT_ALT
 }
 
+enum overcharge_actions
+{
+	OVERCHARGE_CONTINUE,
+	OVERCHARGE_CANCEL,
+	OVERCHARGE_SHOOT
+}
+
+enum projectile_follow_modes
+{
+	FOLLOW_NONE,
+	FOLLOW_CROSSHAIRS,
+	FOLLOW_ENEMIES,
+}
+
 array<string> g_panim_refs = {
 	"crowbar", "gren", "trip", "onehanded", "python", "shotgun", "gauss", "mp5", 
 	"rpg", "egon", "squeak", "hive", "bow", "minigun", "uzis", "m16", "sniper", "saw" 
@@ -325,10 +379,8 @@ class ProjectileOptions
 	int type = PROJECTILE_CUSTOM;
 	int world_event = PROJ_ACT_ATTACH;
 	int monster_event = PROJ_ACT_ATTACH;
-	float speed = 800;
+	float speed = 0;
 	float life = 0;
-	float explode_mag = 0;
-	float impact_dmg = 0;
 	float elasticity = 0.8; // percentage of reflected velocity
 	float size = 0.001;		  // hull size (all dimensions)
 	string entity_class; // custom projectile entity
@@ -337,6 +389,13 @@ class ProjectileOptions
 	string sprite;
 	Vector angles;
 	Vector avel;
+	Vector offset;
+	Vector player_vel_inf;
+	
+	int follow_mode = FOLLOW_NONE;
+	float follow_radius = 0.0f;
+	float follow_angle = 30.0f;
+	Vector follow_time;
 	
 	string trail_spr;
 	int trail_sprId = 2; // remove me
@@ -387,14 +446,17 @@ class weapon_custom_shoot : ScriptBaseEntity
 	weapon_custom@ weapon;
 	int shoot_type;
 	array<WeaponSound> sounds; // shoot sounds
+	array<WeaponSound> cooldown_sounds; // shoot sounds
 	array<string> shoot_anims; // shoot or melee swing
 	array<string> melee_anims; // melee hit anims
 	array<WeaponSound> melee_hit_sounds;
 	array<WeaponSound> melee_flesh_sounds;
 	array<WeaponSound> shoot_fail_snds;
+	WeaponSound shoot_empty_snd;
 	int shoot_empty_anim;
 	int ammo_cost;
 	float cooldown = 0.5;
+	float cooldown_sound_delay;
 	Vector recoil;
 	float kickback;
 	float knockback;
@@ -402,13 +464,17 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int heal_mode;
 	int heal_targets;
 	
+	float damage;
+	int damage_type;
+	int damage_type2;
+	int gib_type;
+	
 	int bullets;
 	int bullet_type; // see docs for "Bullet"
 	int bullet_color = -1;
 	int bullet_spread_func;
 	int bullet_impact;
 	int bullet_decal;
-	float bullet_damage;
 	float bullet_spread;
 	float bullet_delay; // burst fire delay
 	
@@ -416,12 +482,23 @@ class weapon_custom_shoot : ScriptBaseEntity
 	
 	ProjectileOptions@ projectile;
 	
+	float beam_impact_speed;
 	string beam_impact_spr;
+	int beam_impact_spr_scale;
+	int beam_impact_spr_fps;
+	int beam_impact_spr_opacity;
 	int beam_ricochet_limit; // maximum number of ricochets
 	
 	weapon_custom_effect@ effect1 = weapon_custom_effect();
 	weapon_custom_effect@ effect2 = weapon_custom_effect();
 	weapon_custom_effect@ effect3 = weapon_custom_effect();
+	
+	weapon_custom_user_effect@ user_effect1;
+	weapon_custom_user_effect@ user_effect2;
+	weapon_custom_user_effect@ user_effect3;
+	string user_effect1_str;
+	string user_effect2_str;
+	string user_effect3_str;
 	
 	float rico_angle;
 	Vector muzzle_flash_color;
@@ -433,6 +510,8 @@ class weapon_custom_shoot : ScriptBaseEntity
 	float windup_min_time;
 	float wind_down_time;
 	float windup_mult;
+	float windup_kick_mult;
+	float windup_anim_time;
 	WeaponSound windup_snd;
 	int windup_pitch_start;
 	int windup_pitch_end;
@@ -441,6 +520,11 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int windup_cost;
 	int windup_anim;
 	int wind_down_anim;
+	int windup_anim_loop;
+	float windup_overcharge_time;
+	float windup_overcharge_cooldown;
+	int windup_overcharge_action;
+	int windup_overcharge_anim;
 	
 	int hook_type;
 	int hook_pull_mode;
@@ -473,17 +557,25 @@ class weapon_custom_shoot : ScriptBaseEntity
 			
 		if 		(szKey == "sounds")        sounds = parseSounds(szValue);					
 		else if (szKey == "shoot_fail_snds") shoot_fail_snds = parseSounds(szValue);					
+		else if (szKey == "cooldown_sounds") cooldown_sounds = parseSounds(szValue);					
 		else if (szKey == "shoot_anims")   shoot_anims = szValue.Split(";");					
+		else if (szKey == "shoot_empty_snd")  shoot_empty_snd.file = szValue;					
 		else if (szKey == "shoot_empty_anim") shoot_empty_anim = atoi(szValue);			
 		else if (szKey == "ammo_cost")     ammo_cost = atoi(szValue);			
 		//else if (szKey == "shoot_type")    shoot_type = atoi(szValue);			
 		else if (szKey == "cooldown")      cooldown = atof(szValue);
+		else if (szKey == "cooldown_sound_delay") cooldown_sound_delay = atof(szValue);
 		else if (szKey == "recoil")        recoil = parseVector(szValue);
 		else if (szKey == "kickback")      kickback = atof(szValue);
 		else if (szKey == "knockback")     knockback = atof(szValue);
 		else if (szKey == "max_range")     max_range = atof(szValue);
 		else if (szKey == "heal_mode")     heal_mode = atoi(szValue);
 		else if (szKey == "heal_targets")  heal_targets = atoi(szValue);
+		
+		else if (szKey == "damage_amt")  damage = atof(szValue);
+		else if (szKey == "damage_type")  damage_type = atoi(szValue);
+		else if (szKey == "damage_type2")  damage_type2 = atoi(szValue);
+		else if (szKey == "gib_type")  gib_type = atoi(szValue);
 		
 		else if (szKey == "shell_type")   shell_type = atoi(szValue);
 		else if (szKey == "shell_model")  shell_model = szValue;
@@ -495,7 +587,6 @@ class weapon_custom_shoot : ScriptBaseEntity
 		
 		else if (szKey == "bullets")       bullets = atoi(szValue);
 		else if (szKey == "bullet_type")   bullet_type = atoi(szValue);
-		else if (szKey == "bullet_damage") bullet_damage = atof(szValue);
 		else if (szKey == "bullet_spread") bullet_spread = atof(szValue);
 		else if (szKey == "bullet_delay")  bullet_delay = atof(szValue);
 		else if (szKey == "bullet_color")  bullet_color = atoi(szValue);
@@ -526,8 +617,6 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "projectile_monster_event") projectile.monster_event = atoi(szValue);
 		else if (szKey == "projectile_speed")         projectile.speed = atof(szValue);
 		else if (szKey == "projectile_life")          projectile.life = atof(szValue);
-		else if (szKey == "projectile_explode_mag")   projectile.explode_mag = atof(szValue);
-		else if (szKey == "projectile_impact_dmg")    projectile.impact_dmg = atof(szValue);
 		else if (szKey == "projectile_bounce")        projectile.elasticity = atof(szValue);
 		else if (szKey == "projectile_class")         projectile.entity_class = szValue;
 		else if (szKey == "projectile_mdl")    		  projectile.model = szValue;
@@ -540,9 +629,19 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "projectile_trail_color")   projectile.trail_color = parseColor(szValue);
 		else if (szKey == "projectile_angles")  	  projectile.angles = parseVector(szValue);
 		else if (szKey == "projectile_avel")  		  projectile.avel = parseVector(szValue);
+		else if (szKey == "projectile_offset")  	  projectile.offset = parseVector(szValue);
+		else if (szKey == "projectile_player_vel_inf")projectile.player_vel_inf = parseVector(szValue);
+		else if (szKey == "projectile_follow_mode")   projectile.follow_mode = atoi(szValue);
+		else if (szKey == "projectile_follow_radius") projectile.follow_radius = atof(szValue);
+		else if (szKey == "projectile_follow_angle")  projectile.follow_angle = atof(szValue);
+		else if (szKey == "projectile_follow_time")   projectile.follow_time = parseVector(szValue);
 				
-		else if (szKey == "beam_impact_spr")       beam_impact_spr = szValue;
-		else if (szKey == "beam_ricochet_limit")   beam_ricochet_limit = atoi(szValue);
+		else if (szKey == "beam_impact_speed")       beam_impact_speed = atof(szValue);
+		else if (szKey == "beam_impact_spr")         beam_impact_spr = szValue;
+		else if (szKey == "beam_impact_spr_scale")   beam_impact_spr_scale = atoi(szValue);
+		else if (szKey == "beam_impact_spr_fps")     beam_impact_spr_fps = atoi(szValue);
+		else if (szKey == "beam_impact_spr_opacity") beam_impact_spr_opacity = atoi(szValue);
+		else if (szKey == "beam_ricochet_limit")     beam_ricochet_limit = atoi(szValue);
 		
 		else if (szKey == "beam1_type")       beams[0].type = atoi(szValue);
 		else if (szKey == "beam1_time")       beams[0].time = atof(szValue);
@@ -562,7 +661,11 @@ class weapon_custom_shoot : ScriptBaseEntity
 		
 		else if (szKey == "effect1_name") 	  effect1.name = szValue;
 		else if (szKey == "effect2_name") 	  effect2.name = szValue;	
-		else if (szKey == "effect3_name") 	  effect3.name = szValue;	
+		else if (szKey == "effect3_name") 	  effect3.name = szValue;
+		else if (szKey == "user_effect1") 	  user_effect1_str = szValue;
+		else if (szKey == "user_effect2") 	  user_effect2_str = szValue;
+		else if (szKey == "user_effect3") 	  user_effect3_str = szValue;
+		
 		else if (szKey == "rico_angle") 	  rico_angle = atof(szValue);		
 		else if (szKey == "muzzle_flash_color") muzzle_flash_color = parseVector(szValue);		
 		else if (szKey == "muzzle_flash_adv")   muzzle_flash_adv = parseVector(szValue);		
@@ -573,6 +676,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "windup_min_time") 	windup_min_time = atof(szValue);
 		else if (szKey == "wind_down_time") 	wind_down_time = atof(szValue);
 		else if (szKey == "windup_mult") 	    windup_mult = atof(szValue);
+		else if (szKey == "windup_kick_mult") 	windup_kick_mult = atof(szValue);
 		else if (szKey == "windup_snd") 	    windup_snd.file = szValue;
 		else if (szKey == "windup_pitch_start") windup_pitch_start = atoi(szValue);
 		else if (szKey == "windup_pitch_end") 	windup_pitch_end = atoi(szValue);
@@ -581,6 +685,12 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "windup_cost") 		windup_cost = atoi(szValue);
 		else if (szKey == "windup_anim") 		windup_anim = atoi(szValue);
 		else if (szKey == "wind_down_anim") 	wind_down_anim = atoi(szValue);
+		else if (szKey == "windup_anim_time") 	windup_anim_time = atof(szValue);
+		else if (szKey == "windup_anim_loop") 	windup_anim_loop = atoi(szValue);
+		else if (szKey == "windup_overcharge_time") windup_overcharge_time = atof(szValue);
+		else if (szKey == "windup_overcharge_cooldown") windup_overcharge_cooldown = atof(szValue);
+		else if (szKey == "windup_overcharge_action") windup_overcharge_action = atoi(szValue);
+		else if (szKey == "windup_overcharge_anim") windup_overcharge_anim = atoi(szValue);
 		
 		else return BaseClass.KeyValue( szKey, szValue );
 		
@@ -608,12 +718,14 @@ class weapon_custom_shoot : ScriptBaseEntity
 		loadSoundSettings(melee_hit_sounds);
 		loadSoundSettings(melee_flesh_sounds);
 		loadSoundSettings(shoot_fail_snds);
+		loadSoundSettings(cooldown_sounds);
 		loadSoundSettings(windup_snd);
 		loadSoundSettings(hook_snd);
 		loadSoundSettings(hook_snd2);
 		loadSoundSettings(projectile.move_snd);
 		loadSoundSettings(toggle_snd);
 		loadSoundSettings(shell_delay_snd);
+		loadSoundSettings(shoot_empty_snd);
 	}
 	
 	void loadExternalEffectSettings()
@@ -621,6 +733,18 @@ class weapon_custom_shoot : ScriptBaseEntity
 		@effect1 = loadEffectSettings(effect1);
 		@effect2 = loadEffectSettings(effect2);
 		@effect3 = loadEffectSettings(effect3);
+		
+		@user_effect1 = loadUserEffectSettings(user_effect1, user_effect1_str);
+		@user_effect2 = loadUserEffectSettings(user_effect2, user_effect2_str);
+		@user_effect3 = loadUserEffectSettings(user_effect3, user_effect3_str);
+	}
+	
+	int damageType(int defaultType)
+	{
+		int dtype = defaultType;
+		if (damage_type >= 0)
+			dtype = damage_type;
+		return dtype | damage_type2 | gib_type;
 	}
 	
 	WeaponSound@ getRandomShootSound()
@@ -653,6 +777,14 @@ class weapon_custom_shoot : ScriptBaseEntity
 			return null;
 		int randIdx = Math.RandomLong(0, shoot_fail_snds.length()-1);
 		return shoot_fail_snds[randIdx];
+	}
+	
+	WeaponSound@ getRandomCooldownSound()
+	{
+		if (cooldown_sounds.length() == 0)
+			return null;
+		int randIdx = Math.RandomLong(0, cooldown_sounds.length()-1);
+		return cooldown_sounds[randIdx];
 	}
 	
 	bool validateSettings()
@@ -728,6 +860,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		PrecacheSound(hook_snd2.file);
 		PrecacheSound(toggle_snd.file);
 		PrecacheSound(shell_delay_snd.file);
+		PrecacheSound(shoot_empty_snd.file);
 			
 		PrecacheSound(projectile.move_snd.file);
 		PrecacheModel(beam_impact_spr);
@@ -813,6 +946,7 @@ class weapon_custom : ScriptBaseEntity
 	string hud_sprite_folder;
 	string laser_sprite;
 	int zoom_fov;
+	int max_live_projectiles = 0;
 	
 	array<string> idle_anims;
 	
@@ -900,6 +1034,7 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "sprite_directory") hud_sprite_folder = szValue;
 		else if (szKey == "weapon_priority") priority = atoi(szValue);
 		else if (szKey == "player_anims") player_anims = atoi(szValue);
+		else if (szKey == "projectile_max_alive") max_live_projectiles = atoi(szValue);
 		else return BaseClass.KeyValue( szKey, szValue );
 			
 		return true;
@@ -996,7 +1131,8 @@ class weapon_custom : ScriptBaseEntity
 		{
 			validateSettings();
 			
-			println("Assigning " + weapon_classname + " to slot " + slot + " at position " + slotPosition);			
+			if (debug_mode)
+				println("Assigning " + weapon_classname + " to slot " + slot + " at position " + slotPosition);			
 		
 			custom_weapons[weapon_classname] = @this;
 			g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomBase", weapon_classname );
@@ -1048,6 +1184,8 @@ class weapon_custom : ScriptBaseEntity
 
 class weapon_custom_sound : ScriptBaseEntity
 {	
+	WeaponSound next_snd;
+	
 	bool KeyValue( const string& in szKey, const string& in szValue )
 	{
 		return BaseClass.KeyValue( szKey, szValue );
@@ -1055,7 +1193,13 @@ class weapon_custom_sound : ScriptBaseEntity
 	
 	void Spawn()
 	{
+		next_snd.file = pev.noise;
 		Precache();
+	}
+	
+	void loadExternalSoundSettings()
+	{
+		loadSoundSettings(next_snd);
 	}
 	
 	void PrecacheSound(string sound)
@@ -1076,17 +1220,54 @@ class weapon_custom_effect : ScriptBaseEntity
 {	
 	string name;
 	bool valid = false;
+	
+	float delay = 0;
 
 	int explosion_style;
-	float explode_mag;
+	float explode_radius;
 	float explode_damage;
+	float explode_offset;
+	float explode_spr_scale;
+	float explode_spr_fps;
+	string explode_water_spr;
 	string explode_spr;
-	int explode_decal;
+	
+	int damage_type;
+	int damage_type2;
+	int gib_type;
+	
 	string explode_smoke_spr;
-	Color explode_light;
+	float explode_smoke_spr_scale;
+	float explode_smoke_spr_fps;
+	float explode_smoke_delay;
+	
+	float explode_beam_radius;
+	int explode_beam_width;
+	int explode_beam_life;
+	int explode_beam_noise;
+	Color explode_beam_color;
+	int explode_beam_frame;
+	int explode_beam_fps;
+	int explode_beam_scroll;
+	
+	int explode_bubbles;
+	Vector explode_bubble_mins;
+	Vector explode_bubble_maxs;
+	float explode_bubble_delay;
+	float explode_bubble_speed;
+	string explode_bubble_spr;
+	
+	Color explode_light_color;
+	Color explode_light_color2;
+	Vector explode_light_adv;
+	Vector explode_light_adv2;
+	
 	int explode_gibs;
 	string explode_gib_mdl;
 	int explode_gib_mat;
+	int explode_gib_speed;
+	int explode_gib_rand;
+	int explode_gib_effects;
 	
 	array<WeaponSound> sounds;
 	int rico_decal;
@@ -1094,22 +1275,94 @@ class weapon_custom_effect : ScriptBaseEntity
 	int rico_part_count;
 	int rico_part_scale;
 	int rico_part_speed;
+	
 	int rico_trace_count;
 	int rico_trace_color;
 	int rico_trace_speed;
+	int rico_trace_rand;
+	
+	string glow_spr;
+	int glow_spr_scale;
+	int glow_spr_life;
+	int glow_spr_opacity;
+	
+	int spray_count;
+	string spray_sprite;
+	int spray_speed;
+	int spray_rand;
+	
+	int burst_life;
+	int burst_radius;
+	int burst_color;
+	
+	int implode_count;
+	int implode_radius;
+	int implode_life;
+	
+	int rico_scale;
+	
+	string next_effect_str;
+	
+	weapon_custom_effect@ next_effect;
+	bool next_effect_loaded = false;
 
 	bool KeyValue( const string& in szKey, const string& in szValue )
 	{
 		if (szKey == "explosion_style")   explosion_style = atoi(szValue);
-		else if (szKey == "explode_mag")       explode_mag = atof(szValue);
+		else if (szKey == "delay")       delay = atof(szValue);
+		else if (szKey == "explode_radius")    explode_radius = atof(szValue);
 		else if (szKey == "explode_dmg")       explode_damage = atof(szValue);
+		else if (szKey == "explode_offset")    explode_offset = atof(szValue);
 		else if (szKey == "explode_spr")       explode_spr = szValue;
-		else if (szKey == "explode_decal")     explode_decal = atoi(szValue);
+		else if (szKey == "explode_water_spr") explode_water_spr = szValue;
+		else if (szKey == "explode_spr_scale") explode_spr_scale = atof(szValue);
+		else if (szKey == "explode_spr_fps")   explode_spr_fps = atof(szValue);
 		else if (szKey == "explode_smoke_spr") explode_smoke_spr = szValue;
-		else if (szKey == "explode_dlight")    explode_light = parseColor(szValue);
+		else if (szKey == "explode_smoke_spr_scale") explode_smoke_spr_scale = atof(szValue);
+		else if (szKey == "explode_smoke_spr_fps") explode_smoke_spr_fps = atof(szValue);
+		else if (szKey == "explode_smoke_delay") explode_smoke_delay = atof(szValue);
+		else if (szKey == "explode_light_color") explode_light_color = parseColor(szValue);
+		else if (szKey == "explode_light_adv")   explode_light_adv = parseVector(szValue);
+		else if (szKey == "explode_light_color2") explode_light_color2 = parseColor(szValue);
+		else if (szKey == "explode_light_adv2")   explode_light_adv2 = parseVector(szValue);
+		
+		else if (szKey == "explode_beam_width")  explode_beam_width = atoi(szValue);
+		else if (szKey == "explode_beam_life")  explode_beam_life = atoi(szValue);
+		else if (szKey == "explode_beam_noise")  explode_beam_noise = atoi(szValue);
+		else if (szKey == "explode_beam_frame")  explode_beam_frame = atoi(szValue);
+		else if (szKey == "explode_beam_fps")  explode_beam_fps = atoi(szValue);
+		else if (szKey == "explode_beam_scroll")  explode_beam_scroll = atoi(szValue);
+		else if (szKey == "explode_beam_radius")  explode_beam_radius = atof(szValue);
+		else if (szKey == "explode_beam_color")  explode_beam_color = parseColor(szValue);
+		
+		else if (szKey == "implode_count")  implode_count = atoi(szValue);
+		else if (szKey == "implode_radius") implode_radius = atoi(szValue);
+		else if (szKey == "implode_life")   implode_life = atoi(szValue);
+		
+		else if (szKey == "burst_life")   burst_life = atoi(szValue);
+		else if (szKey == "burst_radius") burst_radius = atoi(szValue);
+		else if (szKey == "burst_color")  burst_color = atoi(szValue);
+		
+		else if (szKey == "spray_count")  spray_count = atoi(szValue);
+		else if (szKey == "spray_sprite") spray_sprite = szValue;
+		else if (szKey == "spray_speed")  spray_speed = atoi(szValue);
+		else if (szKey == "spray_rand")   spray_rand = atoi(szValue);
+		
 		else if (szKey == "explode_gibs")      explode_gibs = atoi(szValue);
+		else if (szKey == "explode_gib_speed") explode_gib_speed = atoi(szValue);
 		else if (szKey == "explode_gib_model") explode_gib_mdl = szValue;
 		else if (szKey == "explode_gib_mat")   explode_gib_mat = atoi(szValue);
+		else if (szKey == "explode_gib_rand")  explode_gib_rand = atoi(szValue);
+		else if (szKey == "explode_gib_effects")explode_gib_effects = atoi(szValue);
+		
+		else if (szKey == "glow_spr")         glow_spr = szValue;
+		else if (szKey == "glow_spr_scale")   glow_spr_scale = atoi(szValue);
+		else if (szKey == "glow_spr_life")    glow_spr_life = atoi(szValue);
+		else if (szKey == "glow_spr_opacity") glow_spr_opacity = atoi(szValue);
+		
+		else if (szKey == "damage_type")  damage_type = atoi(szValue);
+		else if (szKey == "damage_type2")  damage_type2 = atoi(szValue);
+		else if (szKey == "gib_type")  gib_type = atoi(szValue);
 		
 		else if (szKey == "sounds")        sounds = parseSounds(szValue);
 		
@@ -1120,7 +1373,18 @@ class weapon_custom_effect : ScriptBaseEntity
 		else if (szKey == "rico_part_speed")  rico_part_speed = atoi(szValue);
 		else if (szKey == "rico_trace_count") rico_trace_count = atoi(szValue);
 		else if (szKey == "rico_trace_speed") rico_trace_speed = atoi(szValue);
+		else if (szKey == "rico_trace_rand")  rico_trace_rand = atoi(szValue);
 		else if (szKey == "rico_trace_color") rico_trace_color = atoi(szValue);
+		
+		else if (szKey == "explode_bubbles")       explode_bubbles = atoi(szValue);
+		else if (szKey == "explode_bubble_mins")   explode_bubble_mins = parseVector(szValue);
+		else if (szKey == "explode_bubble_maxs")   explode_bubble_maxs = parseVector(szValue);
+		else if (szKey == "explode_bubble_delay")  explode_bubble_delay = atof(szValue);
+		else if (szKey == "explode_bubble_spr")    explode_bubble_spr = szValue;
+		
+		else if (szKey == "rico_scale")    rico_scale = atoi(szValue);
+		
+		else if (szKey == "next_effect") next_effect_str = szValue;
 		
 		else return BaseClass.KeyValue( szKey, szValue );
 		
@@ -1135,6 +1399,14 @@ class weapon_custom_effect : ScriptBaseEntity
 	void loadExternalSoundSettings()
 	{
 		loadSoundSettings(sounds);
+	}
+	
+	void loadExternalEffectSettings()
+	{
+		if (next_effect_loaded)
+			return; // fix recursion crash
+		next_effect_loaded = true;
+		@next_effect = loadEffectSettings(next_effect, next_effect_str);
 	}
 	
 	WeaponSound@ getRandomSound()
@@ -1162,6 +1434,11 @@ class weapon_custom_effect : ScriptBaseEntity
 		return -1;
 	}
 	
+	int damageType()
+	{
+		return damage_type | damage_type2 | gib_type;
+	}
+	
 	void Precache()
 	{
 		for (uint i = 0; i < sounds.length(); i++)
@@ -1171,5 +1448,152 @@ class weapon_custom_effect : ScriptBaseEntity
 		PrecacheModel( explode_smoke_spr );
 		PrecacheModel( explode_gib_mdl );
 		PrecacheModel(rico_part_spr);	
+		PrecacheModel(explode_water_spr);	
+		PrecacheModel(explode_bubble_spr);	
+		PrecacheModel(glow_spr);	
+	}
+};
+
+class weapon_custom_user_effect : ScriptBaseEntity
+{	
+	bool valid = false;
+	float delay = 0;	
+	array<WeaponSound> sounds;
+
+	float self_damage;
+	int damage_type;
+	int damage_type2;
+	int gib_type;
+	
+	Vector add_angle;
+	float add_angle_time;
+	Vector punch_angle;
+	Vector push_vel;
+	
+	string action_sprite;
+	float action_sprite_height;
+	float action_sprite_time;
+	
+	int fade_mode;
+	Color fade_color;
+	float fade_hold;
+	float fade_time;
+	
+	int anim; // thirdperson anim
+	float anim_speed; // thirdperson anim
+	int anim_frame; // thirdperson anim
+	
+	int player_sprite_count;
+	string player_sprite;	
+	float player_sprite_freq;	
+	float player_sprite_time;	
+	
+	float glow_time;
+	int glow_amt;
+	Vector glow_color;
+	
+	string next_effect_str;
+	weapon_custom_effect@ next_effect;
+	bool next_effect_loaded = false;
+
+	bool KeyValue( const string& in szKey, const string& in szValue )
+	{
+		if (szKey == "delay")       delay = atof(szValue);
+		else if (szKey == "sounds")      sounds = parseSounds(szValue);
+		
+		else if (szKey == "self_damage")   self_damage = atof(szValue);
+		else if (szKey == "damage_type")   damage_type = atoi(szValue);
+		else if (szKey == "damage_type2")   damage_type2 = atoi(szValue);
+		else if (szKey == "gib_type")   gib_type = atoi(szValue);
+		
+		else if (szKey == "add_angle")      add_angle = parseVector(szValue);
+		else if (szKey == "add_angle_time") add_angle_time = atof(szValue);
+		else if (szKey == "punch_angle")    punch_angle = parseVector(szValue);
+		else if (szKey == "push_vel")       push_vel = parseVector(szValue);
+		
+		else if (szKey == "action_sprite")        action_sprite = szValue;
+		else if (szKey == "action_sprite_height") action_sprite_height = atof(szValue);
+		else if (szKey == "action_sprite_time")   action_sprite_time = atof(szValue);
+		
+		else if (szKey == "fade_mode")  fade_mode = atoi(szValue);
+		else if (szKey == "fade_color") fade_color = parseColor(szValue);
+		else if (szKey == "fade_hold")  fade_hold = atof(szValue);
+		else if (szKey == "fade_time")  fade_time = atof(szValue);
+		
+		else if (szKey == "anim")       anim = atoi(szValue);
+		else if (szKey == "anim_speed") anim_speed = atof(szValue);
+		else if (szKey == "anim_frame") anim_frame = atoi(szValue);
+		
+		else if (szKey == "player_sprite_count") player_sprite_count = atoi(szValue);
+		else if (szKey == "player_sprite")       player_sprite = szValue;
+		else if (szKey == "player_sprite_freq")  player_sprite_freq = atof(szValue);
+		else if (szKey == "player_sprite_time")  player_sprite_time = atof(szValue);
+		
+		else if (szKey == "glow_color") glow_color = parseVector(szValue);
+		else if (szKey == "glow_amt")   glow_amt = atoi(szValue);
+		else if (szKey == "glow_time")  glow_time = atof(szValue);
+		
+		else if (szKey == "next_effect") next_effect_str = szValue;
+		
+		else return BaseClass.KeyValue( szKey, szValue );
+		
+		return true;
+	}
+	
+	void Spawn()
+	{
+		Precache();
+	}
+	
+	void loadExternalSoundSettings()
+	{
+		loadSoundSettings(sounds);
+	}
+	
+	void loadExternalUserEffectSettings()
+	{
+		if (next_effect_loaded)
+			return; // fix recursion crash
+		next_effect_loaded = true;
+		@next_effect = loadEffectSettings(next_effect, next_effect_str);
+	}
+	
+	WeaponSound@ getRandomSound()
+	{
+		if (sounds.length() == 0)
+			return null;
+		int randIdx = Math.RandomLong(0, sounds.length()-1);
+		return sounds[randIdx];
+	}
+	
+	void PrecacheSound(string sound)
+	{
+		if (sound.Length() > 0) {
+			debugln("Precaching sound for " + pev.targetname + ": " + sound);
+			g_SoundSystem.PrecacheSound( sound );
+		}
+	}
+	
+	int PrecacheModel(string model)
+	{
+		if (model.Length() > 0) {
+			debugln("Precaching model for " + pev.targetname + ": " + model);
+			return g_Game.PrecacheModel( model );
+		}
+		return -1;
+	}
+	
+	int damageType()
+	{
+		return damage_type | damage_type2 | gib_type;
+	}
+	
+	void Precache()
+	{
+		for (uint i = 0; i < sounds.length(); i++)
+			PrecacheSound(sounds[i].file);
+			
+		PrecacheModel( action_sprite );	
+		PrecacheModel( player_sprite );	
 	}
 };
