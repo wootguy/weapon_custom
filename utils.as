@@ -4,7 +4,8 @@ class Color
 	Color() { r = g = b = a = 0; }
 	Color(uint8 r, uint8 g, uint8 b) { this.r = r; this.g = g; this.b = b; this.a = 255; }
 	Color(uint8 r, uint8 g, uint8 b, uint8 a) { this.r = r; this.g = g; this.b = b; this.a = a; }
-	Color (Vector v) { this.r = int(v.x); this.g = int(v.y); this.b = int(v.z); this.a = 255; }
+	Color(float r, float g, float b, float a) { this.r = uint8(r); this.g = uint8(g); this.b = uint8(b); this.a = uint8(a); }
+	Color (Vector v) { this.r = uint8(v.x); this.g = uint8(v.y); this.b = uint8(v.z); this.a = 255; }
 	string ToString() { return "" + r + " " + g + " " + b + " " + a; }
 	Vector getRGB() { return Vector(r, g, b); }
 }
@@ -479,12 +480,14 @@ class WeaponCustomProjectile : ScriptBaseEntity
 	float pickupRadius = 64.0f;
 	float nextBubbleTime = 0;
 	float bubbleDelay = 0.07;
+	float nextTrailEffectTime = 0;
+	float nextBounceEffect = 0;
 	
 	void Spawn()
 	{
 		@options = shoot_opts.projectile;
 		
-		self.pev.movetype = MOVETYPE_BOUNCE;
+		self.pev.movetype = options.gravity != 0 ? MOVETYPE_BOUNCE : MOVETYPE_BOUNCEMISSILE;
 		self.pev.solid = SOLID_BBOX;
 		
 		g_EntityFuncs.SetModel( self, pev.model );
@@ -492,7 +495,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		pev.mins = Vector(-options.size, -options.size, -options.size);
 		pev.maxs = Vector(options.size, options.size, options.size);
 		pev.angles = pev.angles + options.angles;
-		pev.avelocity = options.avel;
+		//pev.avelocity = options.avel;
 		//pev.friction = 1.0f - options.elasticity;
 		
 		SetThink( ThinkFunction( MoveThink ) );
@@ -569,7 +572,9 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		if (move_snd_playing and pev.velocity.Length() == 0)
 			options.move_snd.stop(self, CHAN_BODY);
 			
-		if (!attached and g_EngineFuncs.PointContents(pev.origin) == CONTENTS_WATER)
+		bool noBubbles = shoot_opts.pev.spawnflags & FL_SHOOT_NO_BUBBLES != 0;
+		bool inWater = g_EngineFuncs.PointContents(pev.origin) == CONTENTS_WATER;
+		if (!attached and !noBubbles and inWater)
 		{
 			if (nextBubbleTime < g_Engine.time)
 			{
@@ -578,6 +583,27 @@ class WeaponCustomProjectile : ScriptBaseEntity
 				te_bubbletrail(pos, pos, "sprites/bubble.spr", waterLevel, 1, 16.0f);
 				nextBubbleTime = g_Engine.time + bubbleDelay;
 			}
+		}
+		
+		if (inWater and options.water_friction != 0)
+		{
+			float speed = self.pev.velocity.Length();
+			if (speed > 0)
+				self.pev.velocity = resizeVector(self.pev.velocity, speed - speed*options.water_friction);
+		}
+		else if (!inWater and options.air_friction != 0)
+		{
+			float speed = self.pev.velocity.Length();
+			if (speed > 0)
+				self.pev.velocity = resizeVector(self.pev.velocity, speed - speed*options.air_friction);
+		}
+		
+		if (shoot_opts.effect4.valid and nextTrailEffectTime < g_Engine.time)
+		{
+			nextTrailEffectTime = g_Engine.time + options.trail_effect_freq;
+			CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
+			EHandle howner = owner;
+			custom_effect(self.pev.origin, shoot_opts.effect4, self, howner, howner, pev.velocity.Normalize());
 		}
 		
 		if (weaponPickup)
@@ -728,10 +754,17 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		
 		DamageTarget(pOther);
 		knockBack(pOther, pev.velocity.Normalize() * shoot_opts.knockback);
-		CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
-		EHandle howner = owner;
-		EHandle htarget = pOther;
-		custom_effect(self.pev.origin, effect, self, htarget, howner);
+		
+		// don't spam bounce sounds when rolling on ground
+		if (event != PROJ_ACT_BOUNCE or nextBounceEffect < g_Engine.time)
+		{
+			nextBounceEffect = g_Engine.time + options.bounce_effect_delay;
+			CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
+			EHandle howner = owner;
+			EHandle htarget = pOther;
+			custom_effect(self.pev.origin, effect, self, htarget, howner, Vector(0,0,0));
+		}
+		
 		ConvertToWeapon();
 		
 		switch(event)
@@ -783,7 +816,7 @@ void poisonDamage(EHandle target, EHandle attacker, float damage)
 }
 
 void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creator, EHandle target,
-					EHandle owner, DecalTarget@ dt=null, bool delayFinished=false)
+					EHandle owner, Vector vDir, DecalTarget@ dt=null, bool delayFinished=false)
 {
 	if (!effect.valid)
 		return;
@@ -795,7 +828,7 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creato
 		
 	if (effect.delay > 0 and !delayFinished)
 	{
-		g_Scheduler.SetTimeout("custom_effect", effect.delay, pos, @effect, @creator, target, owner, @dt, true);
+		g_Scheduler.SetTimeout("custom_effect", effect.delay, pos, @effect, @creator, target, owner, vDir, @dt, true);
 		return;
 	}
 	
@@ -871,6 +904,28 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creato
 					   effect.rico_part_count, 0, effect.rico_part_scale, 
 					   effect.rico_part_speed, effect.rico_part_speed/2);
 	}
+	if (effect.blood_stream != 0)
+	{
+		int stream_power = effect.blood_stream;
+		Vector bdir = vDir;
+		if (bdir == Vector())
+			bdir = dir;
+		if (stream_power < 0)
+		{
+			stream_power = -stream_power;
+			bdir = bdir * -1;
+		}
+		int bcolor = 0;
+		if (target)
+		{
+			CBaseEntity@ targetEnt = target;
+			bcolor = targetEnt.BloodColor();
+			if (bcolor == BLOOD_COLOR_RED) // 247
+				bcolor = 222; // the enum val is wrong
+		}
+		
+		te_bloodstream(pos, bdir, bcolor, stream_power);
+	}
 	if (effect.rico_trace_count > 0)
 	{
 		te_streaksplash(pos, dt.tr.vecPlaneNormal, effect.rico_trace_color,
@@ -904,6 +959,10 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creato
 		float speed = effect.explode_bubble_speed;
 		g_Scheduler.SetTimeout("delayed_bubbles", effect.explode_bubble_delay, mins, maxs, height, spr, count, speed);
 	}
+	if (effect.shake_radius > 0)
+	{
+		g_PlayerFuncs.ScreenShake(pos, effect.shake_amp, effect.shake_freq, effect.shake_time, effect.shake_radius);
+	}
 	
 	WeaponSound@ rico_snd = effect.getRandomSound();
 	if (rico_snd !is null)
@@ -918,7 +977,7 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creato
 	}
 	*/
 	if (effect.next_effect !is null)
-		custom_effect(pos, effect.next_effect, creator, target, owner, dt, false);
+		custom_effect(pos, effect.next_effect, creator, target, owner, vDir, dt, false);
 }
 
 void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vector decalPos, 
@@ -930,7 +989,9 @@ void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vect
 	int smokeScale = int(effect.explode_smoke_spr_scale * 10.0f);
 	int expScale = int(effect.explode_spr_scale * 10.0f);
 	int expFps = int(effect.explode_spr_fps);
-	string expSprite = inWater ? effect.explode_water_spr : effect.explode_spr;
+	string expSprite = effect.explode_spr;
+	if (inWater and effect.explode_water_spr.Length() > 0)
+		expSprite = effect.explode_water_spr;
 	int life = 8;
 	
 	if (expSprite.Length() > 0)
@@ -992,7 +1053,10 @@ void animate_view_angles(EHandle h_plr, Vector start_angle, Vector add_angle, fl
 	if (plr is null)
 		return;
 		
-	float progress = (g_Engine.time - startTime) / (endTime - startTime);
+	float totalTime = endTime - startTime;
+	float progress = 1;
+	if (totalTime > 0)
+		progress = (g_Engine.time - startTime) / totalTime;
 	if (progress > 1)
 		progress = 1;
 		
@@ -1037,13 +1101,23 @@ void player_revert_glow(EHandle h_plr, Vector oldGlow, float oldGlowAmt, bool us
 		ent.pev.renderfx = 0;
 }
 
-// returns animation to be played by weapon
-void custom_user_effect(CBasePlayer@ plr, weapon_custom_user_effect@ effect)
+void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@ effect, 
+						bool delayFinished=false)
 {
-	if (effect is null)
+	if (effect is null or !h_plr)
 		return;
 		
-	EHandle h_plr = plr;
+	CBaseEntity@ plrEnt = h_plr;
+	CBaseEntity@ wepEnt = h_wep;
+	CBasePlayer@ plr = cast<CBasePlayer@>(plrEnt);
+	CBasePlayerWeapon@ wep = cast<CBasePlayerWeapon@>(wepEnt);
+	WeaponCustomBase@ c_wep = cast<WeaponCustomBase@>(CastToScriptClass(wepEnt));
+		
+	if (effect.delay > 0 and !delayFinished)
+	{
+		g_Scheduler.SetTimeout("custom_user_effect", effect.delay, h_plr, h_wep, effect, true);
+		return;
+	}
 	
 	WeaponSound@ snd = effect.getRandomSound();
 	if (snd !is null)
@@ -1071,16 +1145,38 @@ void custom_user_effect(CBasePlayer@ plr, weapon_custom_user_effect@ effect)
 	plr.pev.velocity = plr.pev.velocity + g_Engine.v_right*push.x + Vector(0,0,1)*push.y + g_Engine.v_forward*push.z;
 
 	// rotate 'em
-	if (effect.add_angle.x != 0 and effect.add_angle.y !=0 and effect.add_angle.z != 0)
+	if (effect.add_angle != Vector(0,0,0) or effect.add_angle_rand != Vector(0,0,0))
 	{
 		float startTime = g_Engine.time;
 		float endTime = startTime + effect.add_angle_time;
-		g_Scheduler.SetTimeout("animate_view_angles", 0, h_plr, plr.pev.v_angle, effect.add_angle, startTime, endTime);
+		Vector r = effect.add_angle_rand;
+		
+		Vector randAngle = Vector(Math.RandomFloat(-r.x, r.x), Math.RandomFloat(-r.y,r.y), Math.RandomFloat(-r.z,r.z));
+		Vector addAngle = effect.add_angle + randAngle;
+		g_Scheduler.SetTimeout("animate_view_angles", 0, h_plr, plr.pev.v_angle, addAngle, startTime, endTime);
 	}
 	
 	// indicate something
 	if (effect.action_sprite.Length() > 0)
 		plr.ShowOverheadSprite(effect.action_sprite, effect.action_sprite_height, effect.action_sprite_time);
+	
+	// firstperson anim
+	if (wep !is null and plr.IsAlive())
+	{
+		if (effect.v_model.Length() > 0)
+		{
+			c_wep.v_model_override = effect.v_model;
+			c_wep.p_model_override = effect.p_model;
+			c_wep.w_model_override = effect.w_model;
+			if (c_wep.w_model_body_override >= 0)
+				c_wep.w_model_body_override = effect.w_model_body;
+			c_wep.Deploy();
+		}
+		if (effect.wep_anim != -1)
+			wep.SendWeaponAnim( effect.wep_anim );
+			
+		c_wep.TogglePrimaryFire(effect.primary_mode);
+	}
 	
 	// thirdperson anim
 	if (effect.anim != -1)
@@ -1124,6 +1220,23 @@ void custom_user_effect(CBasePlayer@ plr, weapon_custom_user_effect@ effect)
 		
 		g_Scheduler.SetTimeout("player_revert_glow", effect.glow_time, h_plr, oldGlow, oldGlowAmt, isGlowing);
 	}
+	
+	if (effect.beam_mode != UBEAM_DISABLED and wep !is null)
+	{
+		c_wep.CreateUserBeam(@effect);
+	}
+	
+	string targetStr = effect.pev.target;
+	if (targetStr.Length() > 0)
+	{
+		CBaseEntity@ effectEnt = cast<CBaseEntity@>(@effect);
+		g_EntityFuncs.FireTargets(targetStr, plrEnt, effectEnt, USE_TYPE(effect.triggerstate));
+	}
+	
+	if (effect.next_effect !is null)
+	{
+		custom_user_effect(h_plr, h_wep, @effect.next_effect, false);
+	}
 }
 
 void delayed_smoke(Vector origin, string sprite, int scale)
@@ -1145,7 +1258,7 @@ void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ sho
 		CBaseEntity@ owner = g_EntityFuncs.Instance( ent.pev.owner );
 		EHandle howner = owner;
 		EHandle target;
-		custom_effect(ent.pev.origin, shoot_opts.effect3, ent, target, howner);
+		custom_effect(ent.pev.origin, shoot_opts.effect3, ent, target, howner, Vector(0,0,0));
 		g_EntityFuncs.Remove(ent);
 	}
 	if (sprite)
@@ -1157,7 +1270,8 @@ void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ sho
 
 void removeWeapon(CBasePlayerWeapon@ wep)
 {
-	wep.Killed(wep.pev, 0);
+	//wep.Killed(wep.pev, 0);
+	wep.m_pPlayer.RemovePlayerItem(wep);
 }
 
 void WaterSoundEffects(Vector pos, SoundArgs@ args)
@@ -1590,6 +1704,22 @@ void knockBack(CBaseEntity@ target, Vector vel)
 		target.pev.velocity = target.pev.velocity + vel;
 }
 
+void monitorWeaponbox(CBaseEntity@ wep)
+{
+	if (wep !is null)
+	{
+		println("BODY: " + wep.pev.classname);
+		wep.pev.body = 3;
+		wep.pev.sequence = 8;
+		g_Scheduler.SetTimeout("monitorWeaponbox", 0.1, @wep);
+	}
+	else
+	{
+		println("LEL NULL ENT");
+	}
+	
+}
+
 float heal(CBaseEntity@ target, weapon_custom_shoot@ opts, float amt)
 {
 	float oldHealth = target.pev.health;
@@ -1857,3 +1987,4 @@ void te_lavasplash(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t
 void te_teleport(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {_te_pointeffect(pos, msgType, dest, TE_TELEPORT);}
 void te_implosion(Vector pos, uint8 radius=255, uint8 count=32, uint8 life=5, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null){NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_IMPLOSION);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteByte(radius);m.WriteByte(count);m.WriteByte(life);m.End();}
 void te_playersprites(CBasePlayer@ target, string sprite="sprites/bubble.spr", uint8 count=16, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_PLAYERSPRITES);m.WriteShort(target.entindex());m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteByte(0);m.End();}
+void te_bloodstream(Vector pos, Vector dir, uint8 color=70, uint8 speed=64, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_BLOODSTREAM);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteCoord(dir.x);m.WriteCoord(dir.y);m.WriteCoord(dir.z);m.WriteByte(color);m.WriteByte(speed);m.End();}
