@@ -540,27 +540,46 @@ class WeaponCustomProjectile : ScriptBaseEntity
 				//if (DotProduct(dir, owner.pev.velocity.Normalize()) < 0)
 				//	owner.pev.velocity = -owner.pev.velocity;
 				
-				if (shoot_opts.hook_pull_mode == HOOK_MODE_PULL)
-					owner.pev.velocity = owner.pev.velocity + dir*shoot_opts.hook_force;
+				float x = tar.pev.maxs.x - tar.pev.mins.x;
+				float y = tar.pev.maxs.y - tar.pev.mins.y;
+				float z = tar.pev.maxs.z - tar.pev.mins.z;
+				float size = x*y*z;
+				float playerSize = 32*32*72;
+				//println("SIZE: " + x + "x" + y + "x" + z + " " + size);
+				
+				bool pullMode = shoot_opts.hook_pull_mode == HOOK_MODE_PULL or 
+								shoot_opts.hook_pull_mode == HOOK_MODE_PULL_LEAST_WEIGHT;
+				bool pullUser = shoot_opts.hook_pull_mode == HOOK_MODE_PULL_LEAST_WEIGHT and playerSize <= size;
+				
+				if (pullMode)
+				{
+					if (pullUser)
+						owner.pev.velocity = owner.pev.velocity + dir*shoot_opts.hook_force;
+					else
+						tar.pev.velocity = tar.pev.velocity - dir*shoot_opts.hook_force*0.5;
+				}
 				else
 					owner.pev.velocity = owner.pev.velocity + repelDir*shoot_opts.hook_force;
 					
-				if (owner.pev.velocity.Length() > shoot_opts.hook_max_speed)
-					owner.pev.velocity = resizeVector(owner.pev.velocity, shoot_opts.hook_max_speed);
-				
-				if (shoot_opts.hook_pull_mode == HOOK_MODE_PULL and owner.pev.flags & FL_ONGROUND != 0 and dir.z > 0)
-				{	
-					// The player is going to be stubborn and glue itself to the ground.
-					// Make sure that forcing the player upward won't jam it into something solid
-					TraceResult tr;
-					Vector vecSrc = owner.pev.origin;
-					Vector vecEnd = owner.pev.origin + Vector(0,0,2);
-					g_Utility.TraceHull( vecSrc, vecEnd, dont_ignore_monsters, human_hull, owner.edict(), tr );
-					if ( tr.flFraction >= 1.0 )
-						owner.pev.origin.z += 2; // cool, we're all clear
+				if (pullUser)
+				{
+					if (owner.pev.velocity.Length() > shoot_opts.hook_max_speed)
+						owner.pev.velocity = resizeVector(owner.pev.velocity, shoot_opts.hook_max_speed);
+					
+					if (shoot_opts.hook_pull_mode == HOOK_MODE_PULL and owner.pev.flags & FL_ONGROUND != 0 and dir.z > 0)
+					{	
+						// The player is going to be stubborn and glue itself to the ground.
+						// Make sure that forcing the player upward won't jam it into something solid
+						TraceResult tr;
+						Vector vecSrc = owner.pev.origin;
+						Vector vecEnd = owner.pev.origin + Vector(0,0,2);
+						g_Utility.TraceHull( vecSrc, vecEnd, dont_ignore_monsters, human_hull, owner.edict(), tr );
+						if ( tr.flFraction >= 1.0 )
+							owner.pev.origin.z += 2; // cool, we're all clear
+					}
 				}
 				
-				nextThink = g_Engine.time; // don't let gravity overpower the pull force
+				nextThink = g_Engine.time; // don't let gravity overpower the pull force too easily
 			}
 		}
 		else
@@ -714,15 +733,24 @@ class WeaponCustomProjectile : ScriptBaseEntity
 	
 	bool isValidHookSurface(CBaseEntity@ pOther)
 	{
-		if (shoot_opts.hook_texture_filter.Length() > 0)
+		if (pOther.IsBSPModel())
 		{
-			if (!pOther.IsBSPModel())
+			if (shoot_opts.hook_targets == HOOK_MONSTERS_ONLY)
 				return false;
-			
-			DecalTarget dt = getProjectileDecalTarget(self, Vector(0,0,0), 1);
-			if (dt.texture.Find(shoot_opts.hook_texture_filter) != 0)
+				
+			if (shoot_opts.hook_texture_filter.Length() > 0)
+			{				
+				DecalTarget dt = getProjectileDecalTarget(self, Vector(0,0,0), 1);
+				if (dt.texture.Find(shoot_opts.hook_texture_filter) != 0)
+					return false;
+			}
+		}
+		else
+		{
+			if (shoot_opts.hook_targets == HOOK_WORLD_ONLY)
 				return false;
 		}
+		
 		return true;
 	}
 	
@@ -787,6 +815,14 @@ class WeaponCustomProjectile : ScriptBaseEntity
 				pev.velocity = Vector(0,0,0);
 				pev.avelocity = Vector(0,0,0);
 				attached = true;
+				
+				// attach to center of monster
+				if (shoot_opts.hook_type != HOOK_DISABLED and pOther.IsMonster())
+				{
+					CBaseMonster@ mon = cast<CBaseMonster@>(pOther);
+					float height = mon.pev.maxs.z - mon.pev.mins.z;
+					attachStartOri = mon.pev.origin + Vector(0,0,height*0.5f);					
+				}
 				return;
 		}
 	}
@@ -823,7 +859,7 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creato
 		
 	if (dt is null)
 	{
-		@dt = @getProjectileDecalTarget(creator, Vector(0,0,0), 32);
+		@dt = @getProjectileDecalTarget(creator, creator is null ? pos : Vector(0,0,0), 32);
 	}
 		
 	if (effect.delay > 0 and !delayFinished)
@@ -929,7 +965,7 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creato
 	if (effect.rico_trace_count > 0)
 	{
 		te_streaksplash(pos, dt.tr.vecPlaneNormal, effect.rico_trace_color,
-						effect.rico_trace_count, effect.rico_trace_rand, effect.rico_trace_speed);
+						effect.rico_trace_count, effect.rico_trace_speed, effect.rico_trace_rand);
 	}
 	if (effect.rico_decal != DECAL_NONE)
 	{
@@ -1104,7 +1140,7 @@ void player_revert_glow(EHandle h_plr, Vector oldGlow, float oldGlowAmt, bool us
 void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@ effect, 
 						bool delayFinished=false)
 {
-	if (effect is null or !h_plr)
+	if (effect is null or !h_plr or !h_wep)
 		return;
 		
 	CBaseEntity@ plrEnt = h_plr;

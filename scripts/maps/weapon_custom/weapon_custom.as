@@ -178,15 +178,17 @@ void test()
 {
 	CBaseEntity@ ent = null;
 	do {
-		@ent = g_EntityFuncs.FindEntityByClassname(ent, "beam"); 
+		@ent = g_EntityFuncs.FindEntityByClassname(ent, "monster_satchel"); 
 
 		if (ent !is null)
 		{
-			//println("got1: " + ent.pev.flags);
+			println("got1: " + ent.pev.velocity.Length());
 			//ent.pev.flags |= 4096 | FL_NO`WEAPONS;
 			//ent.pev.solid = SOLID_NOT;
-			CBeam@ beam = cast<CBeam@>(ent);
-			println("shock: " + beam.GetWidth());
+			//CBeam@ beam = cast<CBeam@>(ent);
+			//int r, g, b;
+			//beam.GetColor(r, g, b);
+			//println("shock: " + beam.GetNoise());
 			//scanEnt(ent);
 			//ent.pev.body = 3;
 			//ent.pev.sequence = 8;
@@ -197,7 +199,7 @@ void test()
  
 void MapInit()
 {
-	g_Scheduler.SetInterval("test", 0.05);
+	//g_Scheduler.SetInterval("test", 0.0);
 	WeaponCustomMapInit();
 	
 	// TODO: Fix really weird bug where manually placed weapons don't spawn.
@@ -493,8 +495,16 @@ enum hook_types
 enum hook_modes
 {
 	HOOK_MODE_PULL,
+	HOOK_MODE_PULL_LEAST_WEIGHT,
 	HOOK_MODE_REPEL,
 	HOOK_MODE_SWING,
+}
+
+enum hook_targets
+{
+	HOOK_EVERYTHING,
+	HOOK_WORLD_ONLY,
+	HOOK_MONSTERS_ONLY,
 }
 
 enum heal_targets
@@ -701,11 +711,11 @@ class weapon_custom_shoot : ScriptBaseEntity
 	
 	float melee_miss_cooldown;
 	
-	ProjectileOptions@ projectile;
+	ProjectileOptions@ projectile = ProjectileOptions();
 	
 	float beam_impact_speed;
 	string beam_impact_spr;
-	int beam_impact_spr_scale;
+	float beam_impact_spr_scale;
 	int beam_impact_spr_fps;
 	int beam_impact_spr_opacity;
 	int beam_ricochet_limit; // maximum number of ricochets
@@ -758,6 +768,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	
 	int hook_type;
 	int hook_pull_mode;
+	int hook_targets;
 	int hook_anim;
 	int hook_anim2;
 	float hook_force;
@@ -781,10 +792,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	array<BeamOptions> beams = {BeamOptions(), BeamOptions()};
 	
 	bool KeyValue( const string& in szKey, const string& in szValue )
-	{
-		if (projectile is null)
-			@projectile = ProjectileOptions();
-			
+	{			
 		if 		(szKey == "sounds")        sounds = parseSounds(szValue);					
 		else if (szKey == "shoot_fail_snds") shoot_fail_snds = parseSounds(szValue);									
 		else if (szKey == "shoot_anims")   shoot_anims = szValue.Split(";");					
@@ -827,6 +835,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "melee_miss_cooldown") melee_miss_cooldown = atof(szValue);	
 		
 		else if (szKey == "hook_type") hook_type = atoi(szValue);	
+		else if (szKey == "hook_targets") hook_targets = atoi(szValue);	
 		else if (szKey == "hook_pull_mode") hook_pull_mode = atoi(szValue);	
 		else if (szKey == "hook_anim") hook_anim = atoi(szValue);	
 		else if (szKey == "hook_anim2") hook_anim2 = atoi(szValue);	
@@ -873,7 +882,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 				
 		else if (szKey == "beam_impact_speed")       beam_impact_speed = atof(szValue);
 		else if (szKey == "beam_impact_spr")         beam_impact_spr = szValue;
-		else if (szKey == "beam_impact_spr_scale")   beam_impact_spr_scale = atoi(szValue);
+		else if (szKey == "beam_impact_spr_scale")   beam_impact_spr_scale = atof(szValue);
 		else if (szKey == "beam_impact_spr_fps")     beam_impact_spr_fps = atoi(szValue);
 		else if (szKey == "beam_impact_spr_opacity") beam_impact_spr_opacity = atoi(szValue);
 		else if (szKey == "beam_ricochet_limit")     beam_ricochet_limit = atoi(szValue);
@@ -1072,6 +1081,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 					"Your game might freeze occasionally with 'Overflow beam entity list!' spammed in console\n");
 		
 		custom_weapon_shoots[pev.targetname] = @this;
+
 		Precache();
 	}
 	
