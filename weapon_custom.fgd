@@ -474,12 +474,6 @@
 		1 : "Uniform"
 	]
 	bullet_delay(string) : "Melee Burst Fire Delay" : "0"
-	bullet_impact(choices) : "Impact Mode" : 0 =
-	[
-		0: "Standard"
-		1 : "Melee"
-		2 : "Explode"	
-	]
 	bullet_decal(choices) : "Impact Decal" : 24 =
 	[	
 		-2 : "None"
@@ -539,7 +533,8 @@
 	hook_pull_mode(choices) : "Hook Mode" : 0 =
 	[
 		0 : "Pull"
-		1 : "Repel"
+		1 : "Pull Least Weight"
+		2 : "Repel"
 	]
 	hook_targets(choices) : "Hook Targets" : 0 =
 	[
@@ -650,7 +645,7 @@
 [
 	beam_impact_speed(string) : "Beam Impact Frequency" : "0.1"
 	beam_impact_spr(string) : "Beam Impact Sprite" : ""
-	beam_impact_spr_scale(integer) : "Beam Impact Sprite Scale (0 - 255)" : 1
+	beam_impact_spr_scale(integer) : "Beam Impact Sprite Scale" : 1
 	beam_impact_spr_fps(integer) : "Beam Impact Sprite FPS (0 - 255)" : 10
 	beam_impact_spr_opacity(integer) : "Beam Impact Sprite Opacity (0 - 255)" : 255
 	beam_ricochet_limit(integer) : "Beam Ricochet Limit" : 3
@@ -684,8 +679,9 @@
 	]
 	beam1_alt_time(string) : "Beam 1 Alt Interpolation Time" : "1"
 	
-	beam2_type(choices) : "Beam 2 Type" : 0 =
+	beam2_type(choices) : "Beam 2 Type" : -1 =
 	[
+		-1 : "Disabled"
 		0 : "Linear"
 		1 : "Spiral"
 		2 : "Linear + Opaque"
