@@ -248,14 +248,49 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		//CBaseEntity@ ent = cast<CBaseEntity@>(self);
 		//monitorWeaponbox(@ent);
 		
+		println("LE DROP ITEM");
+		
 		return self;
 	}
 	
 	void Holster(int iSkipLocal = 0) 
 	{
-		// TODO: Cleanup beams, windups, etc.
-		//self.pev.body = 3;
-		//self.pev.sequence = 8;
+		// Cleanup beams, windups, etc.
+
+		if (hook_ent)
+		{
+			CBaseEntity@ hookEnt = hook_ent;
+			WeaponCustomProjectile@ hookEnt_c = cast<WeaponCustomProjectile@>(CastToScriptClass(hookEnt));
+			hookEnt_c.uninstall_steam_and_kill_yourself();
+		}
+		if (hook_beam)
+			g_EntityFuncs.Remove( hook_beam );
+		hook_beam = null;
+		
+		HideLaser();
+		if (self.m_fInZoom)
+			primaryAlt = false;
+		CancelZoom();
+		CancelBeam();
+		
+		reloading = 0;
+		
+		windingUp = false;
+		windupLoopEntered = false;
+		windupSoundActive = false;
+		windingDown = false;
+		windupFinished = false;
+		windupAmmoUsed = 0;
+		if (active_opts !is null)
+		{
+			active_opts.windup_snd.stop(self.m_pPlayer, CHAN_VOICE);
+			active_opts.wind_down_snd.stop(self.m_pPlayer, CHAN_VOICE);
+			active_opts.windup_loop_snd.stop(self.m_pPlayer, CHAN_VOICE);	
+		}
+		
+		for (uint i = 0; i < ubeams.length(); i++)
+			g_EntityFuncs.Remove(ubeams[i]);
+		
 		println("HOLSTA");	
 		self.m_pPlayer.pev.maxspeed = baseMoveSpeed;
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
@@ -489,7 +524,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	{
 		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
 		
-		ProjectileOptions@ options = active_opts.projectile;
+		ProjectileOptions@ options = @active_opts.projectile;
 		
 		// Get amount of player velocity to add to projectile.
 		Vector inf = options.player_vel_inf;
@@ -675,8 +710,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			liveProjectiles--;
 			
-			if (liveProjectiles <= 0)
-				g_Scheduler.SetTimeout( "removeWeapon", (deathTime - g_Engine.time), @self );
+			if (liveProjectiles <= 0 and AmmoLeft(active_ammo_type) <= 0 and self.m_iClip < 0)
+			{
+				println("KILL");
+				g_Scheduler.SetTimeout( "removeWeapon", Math.min(0, (deathTime - g_Engine.time)), @self );
+			}
 		}
 		else
 			g_Scheduler.SetTimeout(@this, "MonitorProjectileLife", 0.1, h_proj);
@@ -976,8 +1014,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 						impact.pev.origin = shot.tr.vecEndPos;
 						
 						// manual frame increments since framerate is broken (stutter if not multiple of 5)
-						impact.pev.frame += active_opts.beam_impact_spr_fps*g_Engine.frametime;
-						impact.pev.frame = impact.pev.frame % impact.Frames();
+						if (impact.Frames() > 0)
+						{
+							impact.pev.frame += active_opts.beam_impact_spr_fps*g_Engine.frametime;
+							impact.pev.frame = impact.pev.frame % impact.Frames();
+						}
 					}
 					else if (beamHits[i])
 						g_EntityFuncs.Remove( beamHits[i] );
@@ -1032,14 +1073,19 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void CancelBeam()
 	{
 		DestroyBeams();
+		bool beamWasActive = beam_active;
 		beam_active = false;
+		hookAnimStarted = false;
 		
-		if (minBeamTime == 0)
+		if (active_opts is null) // weapon was never fired
+			return;
+		
+		if (beamWasActive and minBeamTime == 0)
 		{
 			if (lastShootSnd !is null)
-				lastShootSnd.stop(self.m_pPlayer, CHAN_WEAPON);
-			active_opts.hook_snd.stop(self.m_pPlayer, CHAN_WEAPON);
-			active_opts.hook_snd2.play(self.m_pPlayer, CHAN_WEAPON);
+				lastShootSnd.stop(self.m_pPlayer, CHAN_VOICE);
+			active_opts.hook_snd.stop(self.m_pPlayer, CHAN_VOICE);
+			active_opts.hook_snd2.play(self.m_pPlayer, CHAN_VOICE);
 			self.SendWeaponAnim( settings.getRandomIdleAnim() );
 			//self.SendWeaponAnim( active_opts.hook_anim2, 0, 0 );
 			//self.m_flTimeWeaponIdle = g_Engine.time + active_opts.hook_delay2; // idle after this	
@@ -1594,7 +1640,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				if (minBeamTime == 0 and !hookAnimStarted and hookAnimStartTime <= g_Engine.time)
 				{
 					hookAnimStarted = true;
-					active_opts.hook_snd.play(self.m_pPlayer, CHAN_WEAPON);
+					active_opts.hook_snd.play(self.m_pPlayer, CHAN_VOICE);
 					self.SendWeaponAnim( active_opts.hook_anim, 0, 0 );
 				}				
 			}
@@ -1641,7 +1687,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				if (!hookAnimStarted and hookAnimStartTime <= g_Engine.time)
 				{
 					hookAnimStarted = true;
-					active_opts.hook_snd.play(self.m_pPlayer, CHAN_WEAPON);
+					active_opts.hook_snd.play(self.m_pPlayer, CHAN_VOICE);
 					self.SendWeaponAnim( active_opts.hook_anim, 0, 0 );
 				}
 			}
@@ -1655,8 +1701,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					hookEnt_c.uninstall_steam_and_kill_yourself();
 				}
 				
-				active_opts.hook_snd.stop(self.m_pPlayer, CHAN_WEAPON);
-				active_opts.hook_snd2.play(self.m_pPlayer, CHAN_WEAPON);
+				active_opts.hook_snd.stop(self.m_pPlayer, CHAN_VOICE);
+				active_opts.hook_snd2.play(self.m_pPlayer, CHAN_VOICE);
 				self.SendWeaponAnim( active_opts.hook_anim2, 0, 0 );
 				self.m_flTimeWeaponIdle = g_Engine.time + active_opts.hook_delay2; // idle after this
 				
@@ -1798,7 +1844,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			if (EmptyShoot() and active_opts.shoot_empty_snd.file.Length() > 0)
 				@snd = @active_opts.shoot_empty_snd;
 			SOUND_CHANNEL channel = shootCount % 2 == 0 or noSndOverlap ? CHAN_WEAPON : CHAN_VOICE;
-			if (active_opts.shoot_type == SHOOT_MELEE)
+			if (active_opts.shoot_type == SHOOT_MELEE or (active_opts.shoot_type == SHOOT_BEAM and minBeamTime == 0))
 				channel = CHAN_WEAPON;
 			if (snd !is null)
 				snd.play(self.m_pPlayer, channel);
@@ -2103,6 +2149,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (shootingHook or beam_active)
 		{
 			windupHeld = true;
+			return false;
 		}
 		
 		if (!cooldownFinished())
@@ -2238,7 +2285,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					HideLaser();
 			}
 			if (fireAct == FIRE_ACT_ZOOM)
-			{
+			{ 
 				self.SetFOV(primaryAlt ? 0 : settings.zoom_fov);
 				self.m_fInZoom = !self.m_fInZoom;
 				if (settings.player_anims == ANIM_REF_BOW)
