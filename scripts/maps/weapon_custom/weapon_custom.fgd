@@ -64,7 +64,7 @@
 	wpn_v_model(string) : "V_Model" : "models/hl/v_9mmar.mdl"
 	wpn_p_model(string) : "P_Model" : "models/hl/p_9mmar.mdl"
 	wpn_w_model(string) : "W_Model" : "models/hl/w_9mmar.mdl"
-	wpn_w_model_body(integer) : "W_Model Body (Sub-Model)" : 0
+	wpn_w_model_body(integer) : "V_Model Body (Sub-Model)" : 0
 	
 	reload_mode(choices) : "Reload Mode" : 0 =
 	[
@@ -93,6 +93,7 @@
 	
 	deploy_time(string) : "Deploy Time" : "1"
 	deploy_anim(string) : "Deploy Animation" : ""
+	deploy_snd(string) : "Deploy Sound" : ""
 	idle_anims(string) : "Idle Animations" : ""
 	idle_time(string) : "Idle Animation Time (Seconds)" : ""
 	player_anims(choices) : "Player Animations" : 4 =
@@ -118,6 +119,8 @@
 	] 
 	
 	laser_sprite(string) : "Laser Sight Sprite" : ""
+	laser_sprite_scale(string) : "Laser Sight Sprite Scale" : "1.0"
+	laser_sprite_color(color255) : "Laser Sight Sprite Color (R G B A)" : "255 255 255 255"
 	zoom_fov(integer) : "Zoom FOV (Degrees)" : 40
 	hud_sprite(string) : "HUD Sprite"
 	sprite_directory(string) : "HUD Sprite Info Folder" : "weapon_custom"
@@ -143,6 +146,43 @@
 		9 : "10"
 	]
 	weapon_priority(integer) : "Auto Switch Priority" : 5
+]
+
+@PointClass size(-8 -8 -16, 8 8 16 ) color(255 255 0) = weapon_custom_ammo : "Custom ammo"
+[
+	spawnflags(Flags) =
+	[
+		1 : "" : 0
+	]
+	
+	targetname(target_source) : "Name"
+	ammo_name(string) : "Ammo Class" : "ammo_test"
+	ammo_type(choices) : "Ammo Type" : 5 =
+	[
+		5 : "357"
+		2 : "556"
+		3 : "M40A1"
+		6 : "9mm"
+		4 : "ARGrenades"
+		0 : "Buckshot"
+		11 : "Bolts"
+		14 : "Hand Grenade"
+		16 : "Hornets"
+		1 : "Health"
+		10 : "Rockets"
+		13 : "Satchel Charge"
+		7 : "Shock Charges"
+		15 : "Snarks"
+		8 : "SporeClip"
+		12 : "Trip Mine"
+		9 : "Uranium"
+		-1 : "Custom"
+	]
+	custom_ammo_type(string) : "Custom Ammo Type" : ""
+	give_ammo(integer) : "Give Ammo" : 10
+	max_ammo(integer) : "Max Ammo" : 100
+	w_model(string) : "Model" : "models/w_357ammobox.mdl"
+	pickup_snd(string) : "Pickup Sound" : "items/9mmclip1.wav"
 ]
 
 @PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 255) = weapon_custom_sound : "Custom weapon sound settings"
@@ -287,6 +327,12 @@
 	shoot_fail_snds(string) : "Shoot Failure Sounds" : ""
 	ammo_cost(string) : "Ammo Cost" : "1"
 	cooldown(string) : "Cooldown" : "0.15"
+	bullet_spread(string) : "Accuracy (Degrees)" : "0"
+	bullet_spread_func(choices) : "Accuracy Function" : 0 =
+	[
+		0 : "Gaussian"
+		1 : "Uniform"
+	]
 	recoil(string) : "Recoil (Min Max)" : "-2 2"
 	kickback(string) : "Kickback (User Push)" : "0"
 	knockback(string) : "Knockback (Target Push)" : "10"
@@ -377,7 +423,10 @@
 	wind_down_snd(string) : "Wind Down Sound" : ""
 	
 	toggle_snd(string) : "Toggle Sound" : ""
+	toggle_anim(string) : "Toggle Animation" : "-1"
 	toggle_txt(string) : "Toggle Text" : ""
+	toggle_cooldown(string) : "Toggle Cooldown" : "0.5"
+	
 	spacer(string) : "" : ""
 ]
 
@@ -389,12 +438,6 @@
 @BaseClass = ShootBullet
 [
 	bullets(integer) : "Bullets" : 1
-	bullet_spread(string) : "Bullet Spread (Degrees)" : "6"
-	bullet_spread_func(choices) : "Bullet Spread Function" : 0 =
-	[
-		0 : "Gaussian"
-		1 : "Uniform"
-	]
 	bullet_delay(string) : "Bullet Burst Fire Delay" : "0"
 	bullet_color(choices) : "Bullet Tracers" : 4 =
 	[
@@ -467,12 +510,6 @@
 @BaseClass = ShootMelee
 [
 	bullets(integer) : "Melee Strikes" : 1
-	bullet_spread(string) : "Melee Spread (Degrees)" : "6"
-	bullet_spread_func(choices) : "Melee Spread Function" : 0 =
-	[
-		0 : "Gaussian"
-		1 : "Uniform"
-	]
 	bullet_delay(string) : "Melee Burst Fire Delay" : "0"
 	bullet_decal(choices) : "Impact Decal" : 24 =
 	[	
@@ -647,7 +684,7 @@
 	beam_impact_spr(string) : "Beam Impact Sprite" : ""
 	beam_impact_spr_scale(integer) : "Beam Impact Sprite Scale" : 1
 	beam_impact_spr_fps(integer) : "Beam Impact Sprite FPS (0 - 255)" : 10
-	beam_impact_spr_opacity(integer) : "Beam Impact Sprite Opacity (0 - 255)" : 255
+	beam_impact_spr_color(color255) : "Beam Impact Sprite Color (R G B A)" : "255 255 255 255"
 	beam_ricochet_limit(integer) : "Beam Ricochet Limit" : 3
 	beam1_type(choices) : "Beam 1 Type" : 0 =
 	[
@@ -1043,10 +1080,10 @@
 	action_sprite(string) : "Overhead Sprite" : ""
 	action_sprite_height(string) : "Overhead Sprite Height" : "51"
 	action_sprite_time(string) : "Overhead Sprite Time" : "2.5"
-	wep_anim(string) : "Weapon Animation" : "-1"
 	anim(string) : "Player Animation" : "-1"
 	anim_speed(string) : "Player Animation Speed" : "1"
 	anim_frame(string) : "Player Animation Start Frame" : "0"
+	hud_text(string) : "HUD Text" : ""
 	
 	fade_mode(choices) : "Fade Mode" : -1 =
 	[
@@ -1092,10 +1129,11 @@
 	beam_noise(integer) : "Beam Noise (0-255)" : 32
 	beam_scroll(integer) : "Beam Scroll Rate (0-255)" : 32
 	
+	wep_anim(string) : "Weapon Animation" : "-1"
 	v_model(string) : "Swap Weapon V_Model" : ""
 	p_model(string) : "Swap Weapon P_Model" : ""
 	w_model(string) : "Swap Weapon W_Model" : ""
-	w_model_body(integer) : "Swap Weapon W_Model Body" : -1
+	w_model_body(integer) : "Swap Weapon V_Model Body" : -1
 	target(string) : "Trigger Target" : ""
 	triggerstate(choices) : "Trigger State" : 3 =
 	[
@@ -1114,6 +1152,7 @@
 	user_effect4(string) : "User Effect (Windup)" : ""
 	user_effect1(string) : "User Effect (Shoot)" : ""
 	user_effect3(string) : "User Effect (Cooldown)" : ""
+	user_effect5(string) : "User Effect (Toggle)" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(255 64 64) base(ShootGeneral, ShootMelee) = weapon_custom_melee : "Custom weapon melee"
@@ -1123,6 +1162,7 @@
 	user_effect4(string) : "User Effect (Windup)" : ""
 	user_effect1(string) : "User Effect (Shoot)" : ""
 	user_effect3(string) : "User Effect (Cooldown)" : ""
+	user_effect5(string) : "User Effect (Toggle)" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootProjectile) = weapon_custom_projectile : "Custom weapon projectile"
@@ -1132,7 +1172,7 @@
 	user_effect4(string) : "User Effect (Windup)" : ""
 	user_effect1(string) : "User Effect (Shoot)" : ""
 	user_effect3(string) : "User Effect (Cooldown)" : ""
-	
+	user_effect5(string) : "User Effect (Toggle)" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(0 128 255) base(ShootGeneral, ShootBeam) = weapon_custom_beam : "Custom weapon beam"
@@ -1143,6 +1183,7 @@
 	user_effect4(string) : "User Effect (Windup)" : ""
 	user_effect1(string) : "User Effect (Shoot)" : ""
 	user_effect3(string) : "User Effect (Cooldown)" : ""
+	user_effect5(string) : "User Effect (Toggle)" : ""
 ]
 
 @PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 0) base(ShootName, ShootEffects) = weapon_custom_effect : "Custom weapon effects"

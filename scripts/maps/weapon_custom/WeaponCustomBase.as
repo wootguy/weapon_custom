@@ -135,8 +135,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			@settings = cast<weapon_custom>( @custom_weapons[self.pev.classname] );
 		}
 		
-		info.iMaxAmmo1 	= 1; // doesn't even matter??
-		info.iMaxAmmo2 	= 1; // ^
+		// custom ammo only. Also why would you ever want inconsistent max ammo counts?
+		info.iMaxAmmo1 	= 9999999;
+		info.iMaxAmmo2 	= 9999999;
+		
 		info.iMaxClip 	= settings.clip_size();
 		if (info.iMaxClip < 1)
 			self.m_iClip = -1;
@@ -195,7 +197,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		return false;
 	}
 
-	bool Deploy()
+	int w_body()
+	{
+		return w_model_body_override >= 0 ? w_model_body_override : settings.wpn_w_model_body;
+	}
+	
+	bool Deploy(bool skipDelay)
 	{
 		if (settings.pev.spawnflags & FL_WEP_LASER_SIGHT != 0 and !primaryAlt)
 		{
@@ -210,18 +217,28 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		// body not used until weapon dropped
 		
 		bool ret = self.DefaultDeploy( self.GetV_Model( v_mod ), self.GetP_Model( p_mod ), 
-								   settings.deploy_anim, settings.getPlayerAnimExt(), 0, 0 );
+								   settings.deploy_anim, settings.getPlayerAnimExt(), 0, w_body() );
 		
 		g_EntityFuncs.SetModel( self, w_mod );
 		
-		self.m_flTimeWeaponIdle = WeaponTimeBase() + settings.deploy_time;		   
-		deployTime = g_Engine.time;
+		if (!skipDelay)
+		{
+			self.m_flTimeWeaponIdle = WeaponTimeBase() + settings.deploy_time;		   
+			deployTime = g_Engine.time;
+		}
 		
 		baseMoveSpeed = self.m_pPlayer.pev.maxspeed;
+		
+		settings.deploy_snd.play(self.m_pPlayer, CHAN_VOICE);
 		
 		// delay fixes speed not working on minigum weapon switch and initial spawn
 		g_Scheduler.SetTimeout(@this, "applyPlayerSpeedMult", 0);
 		return ret;
+	}
+	
+	bool Deploy()
+	{
+		return Deploy(false);
 	}
 	
 	void applyPlayerSpeedMult()
@@ -291,7 +308,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		for (uint i = 0; i < ubeams.length(); i++)
 			g_EntityFuncs.Remove(ubeams[i]);
 		
-		println("HOLSTA");	
 		self.m_pPlayer.pev.maxspeed = baseMoveSpeed;
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
 			self.m_pPlayer.pev.fuser4 = 0;
@@ -523,6 +539,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	CBaseEntity@ ShootProjectile()
 	{
 		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
+		Vector vecAiming = spreadDir(g_Engine.v_forward, active_opts.bullet_spread, active_opts.bullet_spread_func);
 		
 		ProjectileOptions@ options = @active_opts.projectile;
 		
@@ -535,7 +552,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			   
 		Vector projectile_velocity = g_Engine.v_right*options.speed*options.dir.x +
 									 Vector(0,0,1)*options.speed*options.dir.y +
-									 g_Engine.v_forward*options.speed*options.dir.z + 
+									 vecAiming*options.speed*options.dir.z + 
 									 pvel;
 		
 		Vector ofs = g_Engine.v_right*options.offset.x + g_Engine.v_up*options.offset.y + g_Engine.v_forward*options.offset.z;
@@ -575,13 +592,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			// assumes MakeVectors was already called
 			Vector vecSrc	 = self.m_pPlayer.GetGunPosition();
-			Vector vecAiming = g_Engine.v_forward;
 			
 			// Find a good tripmine location
 			TraceResult tr;
 			Vector vecEnd = vecSrc + vecAiming * active_opts.max_range;
 			g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, self.m_pPlayer.edict(), tr );
-			if (tr.flFraction < 1.0 and active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_MISS != 0)
+			if (tr.flFraction >= 1.0 and active_opts.pev.spawnflags & FL_SHOOT_IF_NOT_MISS != 0)
 			{
 				abortAttack = true;
 			}
@@ -797,10 +813,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		array<BeamShot> shots;
 					
 		Math.MakeVectors( self.m_pPlayer.pev.v_angle );
-		//Vector vecAiming = spreadDir(g_Engine.v_forward, active_opts.bullet_spread, active_opts.bullet_spread_func);
+		Vector vecAiming = spreadDir(g_Engine.v_forward, active_opts.bullet_spread, active_opts.bullet_spread_func);
 			
 		Vector vecSrc = self.m_pPlayer.GetGunPosition();
-		Vector vecEnd = vecSrc + g_Engine.v_forward*active_opts.max_range;
+		Vector vecEnd = vecSrc + vecAiming*active_opts.max_range;
 
 		edict_t@ traceEnt = self.m_pPlayer.edict();
 		
@@ -1001,11 +1017,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 							@impact = g_EntityFuncs.CreateSprite( active_opts.beam_impact_spr, 
 																	   shot.tr.vecEndPos, true, 10 );
 							impact.pev.rendermode = kRenderGlow;
-							impact.pev.renderamt = active_opts.beam_impact_spr_opacity;
+							impact.pev.renderamt = active_opts.beam_impact_spr_color.a;
 							impact.pev.scale = active_opts.beam_impact_spr_scale;
 							impact.pev.framerate = 0;
 							impact.pev.renderfx = kRenderFxNoDissipation;
 							impact.pev.movetype = MOVETYPE_NONE;
+							impact.pev.rendercolor = active_opts.beam_impact_spr_color.getRGB();
 							beamHits[i] = impact;
 						}
 						@beamEnt = beamHits[i];
@@ -1086,7 +1103,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				lastShootSnd.stop(self.m_pPlayer, CHAN_VOICE);
 			active_opts.hook_snd.stop(self.m_pPlayer, CHAN_VOICE);
 			active_opts.hook_snd2.play(self.m_pPlayer, CHAN_VOICE);
-			self.SendWeaponAnim( settings.getRandomIdleAnim() );
+			self.SendWeaponAnim( settings.getRandomIdleAnim(), 0, w_body() );
 			//self.SendWeaponAnim( active_opts.hook_anim2, 0, 0 );
 			//self.m_flTimeWeaponIdle = g_Engine.time + active_opts.hook_delay2; // idle after this	
 			Cooldown(active_opts);
@@ -1256,7 +1273,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					windingDown = true;
 					float ip = 1.0f - Math.min(1.0f, timePassed / active_opts.windup_time);
 					windupStart = g_Engine.time - ip*active_opts.wind_down_time;
-					self.SendWeaponAnim( active_opts.wind_down_anim, 0, 0 );
+					self.SendWeaponAnim( active_opts.wind_down_anim, 0, w_body() );
 					
 					WeaponSound@ snd = active_opts.windup_snd;
 					if (active_opts.wind_down_snd.file.Length() > 0)
@@ -1355,7 +1372,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				if (windupStart + active_opts.windup_anim_time < g_Engine.time)
 				{
 					active_opts.windup_loop_snd.play(self.m_pPlayer, CHAN_VOICE);	
-					self.SendWeaponAnim( active_opts.windup_anim_loop, 0, 0 );
+					self.SendWeaponAnim( active_opts.windup_anim_loop, 0, w_body() );
 					windupLoopEntered = true;
 				}
 			}
@@ -1371,7 +1388,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					custom_user_effect(h_plr, h_wep, @active_opts.user_effect2);
 					
 					if (active_opts.windup_overcharge_anim >= 0)
-						self.SendWeaponAnim( active_opts.windup_overcharge_anim, 0, 0 );	
+						self.SendWeaponAnim( active_opts.windup_overcharge_anim, 0, w_body() );	
 					
 					if (active_opts.windup_overcharge_action != OVERCHARGE_CONTINUE)
 					{
@@ -1387,7 +1404,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 								DoAttack(true);
 						
 						if (active_opts.windup_overcharge_anim <= 0)
-							self.SendWeaponAnim( settings.getRandomIdleAnim() );
+							self.SendWeaponAnim( settings.getRandomIdleAnim(), 0, w_body() );
 						
 						Cooldown(active_opts);
 						active_opts.windup_snd.stop(self.m_pPlayer, CHAN_VOICE);
@@ -1417,7 +1434,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				}
 				
 				if (!windupLoopEntered)
-					self.SendWeaponAnim( active_opts.windup_anim, 0, 0 );
+					self.SendWeaponAnim( active_opts.windup_anim, 0, w_body() );
 				if (active_opts.wind_down_snd.file.Length() > 0)
 				{
 					active_opts.wind_down_snd.stop(self.m_pPlayer, CHAN_VOICE);
@@ -1428,7 +1445,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			}
 			else if (!windupSoundActive)
 			{
-				self.SendWeaponAnim( active_opts.windup_anim, 0, 0 );
+				self.SendWeaponAnim( active_opts.windup_anim, 0, w_body() );
 				
 				active_opts.windup_snd.play(self.m_pPlayer, CHAN_VOICE, 1.0f, active_opts.windup_pitch_start);											
 				windupSoundActive = true;
@@ -1509,7 +1526,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					idleShot = false;
 					// go back to idling
 					if (active_opts.windup_anim_loop != -1)
-						self.SendWeaponAnim( active_opts.windup_anim_loop, 0, 0 );
+						self.SendWeaponAnim( active_opts.windup_anim_loop, 0, w_body() );
 				}
 			}
 			
@@ -1574,13 +1591,13 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				{
 					if (cancelReload)
 					{
-						self.SendWeaponAnim(settings.reload_cancel_anim);
+						self.SendWeaponAnim(settings.reload_cancel_anim, 0, w_body());
 						settings.reload_cancel_snd.play(self.m_pPlayer, CHAN_VOICE);
 						nextShootTime = g_Engine.time + settings.reload_cancel_time;
 					}
 					else
 					{
-						self.SendWeaponAnim(settings.reload_end_anim );
+						self.SendWeaponAnim(settings.reload_end_anim, 0, w_body() );
 						settings.reload_end_snd.play(self.m_pPlayer, CHAN_VOICE);
 						nextShootTime = g_Engine.time + settings.reload_end_time;
 					}
@@ -1599,7 +1616,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					}
 
 					BaseClass.Reload();
-					self.SendWeaponAnim( settings.reload_anim );
+					self.SendWeaponAnim( settings.reload_anim, 0, w_body() );
 					settings.reload_snd.play(self.m_pPlayer, CHAN_VOICE);
 					nextReload = g_Engine.time + settings.reload_time;
 					nextShootTime = nextReload;
@@ -1641,7 +1658,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				{
 					hookAnimStarted = true;
 					active_opts.hook_snd.play(self.m_pPlayer, CHAN_VOICE);
-					self.SendWeaponAnim( active_opts.hook_anim, 0, 0 );
+					self.SendWeaponAnim( active_opts.hook_anim, 0, w_body() );
 				}				
 			}
 			else if (beamStartTime + minBeamTime > g_Engine.time)
@@ -1688,7 +1705,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				{
 					hookAnimStarted = true;
 					active_opts.hook_snd.play(self.m_pPlayer, CHAN_VOICE);
-					self.SendWeaponAnim( active_opts.hook_anim, 0, 0 );
+					self.SendWeaponAnim( active_opts.hook_anim, 0, w_body() );
 				}
 			}
 			else
@@ -1703,7 +1720,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				
 				active_opts.hook_snd.stop(self.m_pPlayer, CHAN_VOICE);
 				active_opts.hook_snd2.play(self.m_pPlayer, CHAN_VOICE);
-				self.SendWeaponAnim( active_opts.hook_anim2, 0, 0 );
+				self.SendWeaponAnim( active_opts.hook_anim2, 0, w_body() );
 				self.m_flTimeWeaponIdle = g_Engine.time + active_opts.hook_delay2; // idle after this
 				
 				if (hook_beam)
@@ -1807,7 +1824,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			int anim = meleeHit ? getRandomMeleeAnim() : active_opts.shoot_empty_anim;
 			if (!meleeHit and (!EmptyShoot() or anim < 0))
 				anim = getRandomShootAnim();
-			self.SendWeaponAnim( anim, 0, 0 );
+			self.SendWeaponAnim( anim, 0, w_body() );
 		}
 
 		// thirperson animation
@@ -2116,9 +2133,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			CSprite@ dot = g_EntityFuncs.CreateSprite( settings.laser_sprite, self.m_pPlayer.pev.origin, true, 10 );
 			dot.pev.rendermode = kRenderGlow;
-			dot.pev.renderamt = 255;
+			dot.pev.renderamt = settings.laser_sprite_color.a;
+			dot.pev.rendercolor = settings.laser_sprite_color.getRGB();
 			dot.pev.renderfx = kRenderFxNoDissipation;
 			dot.pev.movetype = MOVETYPE_NONE;
+			dot.pev.scale = settings.laser_sprite_scale;
 			laser_spr = dot;
 			self.pev.nextthink = g_Engine.time;
 		} 
@@ -2149,7 +2168,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (shootingHook or beam_active)
 		{
 			windupHeld = true;
-			return false;
+			if (@opts != @active_opts)
+				return false;
 		}
 		
 		if (!cooldownFinished())
@@ -2261,7 +2281,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (next_p_opts.toggle_txt.Length() > 0)
 			g_PlayerFuncs.PrintKeyBindingString(self.m_pPlayer, next_p_opts.toggle_txt);
 		
-		nextActionTime = WeaponTimeBase() + 0.5;
+		EHandle h_plr = self.m_pPlayer;
+		EHandle h_wep = cast<CBaseEntity@>(self);
+		custom_user_effect(h_plr, h_wep, @next_p_opts.user_effect5);
+		
+		nextActionTime = nextShootTime = WeaponTimeBase() + next_p_opts.toggle_cooldown;
 	}
 	
 	void CommonAttack(int attackNum)
@@ -2366,7 +2390,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if ((settings.reload_mode == RELOAD_STAGED or settings.reload_mode == RELOAD_STAGED_RESPONSIVE) and 
 			self.m_iClip < settings.clip_size() and AmmoLeft(active_ammo_type) >= settings.reload_ammo_amt)
 		{
-			self.SendWeaponAnim( settings.reload_start_anim );
+			self.SendWeaponAnim( settings.reload_start_anim, 0, w_body() );
 			reloading = 1;
 			nextReload = WeaponTimeBase() + settings.reload_start_time;
 			nextShootTime = nextReload;
@@ -2385,7 +2409,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		bool emptyReloadEffect = emptyReload and settings.user_effect2 !is null;
 		float reload_time = settings.getReloadTime(emptyReloadEffect);
 			
-		bool reloaded = self.DefaultReload( settings.clip_size(), reloadAnim, reload_time, 0 );
+		bool reloaded = self.DefaultReload( settings.clip_size(), reloadAnim, reload_time, w_body() );
 		
 		if (settings.reload_mode == RELOAD_EFFECT_CHAIN)
 		{
@@ -2428,12 +2452,65 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		self.ResetEmptySound();
 		
-		if( self.m_flTimeWeaponIdle > WeaponTimeBase() or windingUp or reloading > 0)
+		if( self.m_flTimeWeaponIdle > WeaponTimeBase() or windingUp or reloading > 0 or nextActionTime > g_Engine.time)
 			return;
 
 		if (settings.idle_time > 0) {
-			self.SendWeaponAnim( settings.getRandomIdleAnim() );
+			self.SendWeaponAnim( settings.getRandomIdleAnim(), 0, w_body() );
 			self.m_flTimeWeaponIdle = WeaponTimeBase() + settings.idle_time; // how long till we do this again.
 		}
+	}
+}
+
+class AmmoCustomBase : ScriptBasePlayerAmmoEntity
+{
+	weapon_custom_ammo@ settings;
+	
+	void Spawn()
+	{ 
+		if (settings is null) {
+			@settings = cast<weapon_custom_ammo>( @custom_ammos[self.pev.classname] );
+		}
+		
+		Precache();
+
+		if( !self.SetupModel() )
+		{
+			g_EntityFuncs.SetModel( self, settings.w_model );
+		}
+		else	//Custom model
+			g_EntityFuncs.SetModel( self, self.pev.model );
+
+		BaseClass.Spawn();
+	}
+	void Precache()
+	{
+		BaseClass.Precache();
+	}
+	bool AddAmmo( CBaseEntity@ pOther ) 
+	{
+		if (pOther.pev.classname != "player")
+			return false;
+		CBasePlayer@ plr = cast<CBasePlayer@>(pOther);
+			
+		int type = settings.ammo_type;
+		string ammo_type = type < 0 ? settings.custom_ammo_type : g_ammo_types[type];
+		
+		// I don't like that you have to code a max ammo in each weapon. So I'm doing the math here.
+		int should_give = settings.give_ammo;
+		int total_ammo = plr.m_rgAmmo(g_PlayerFuncs.GetAmmoIndex(ammo_type));
+		if (total_ammo >= settings.max_ammo)
+			return false;
+		else
+			should_give = Math.min(settings.max_ammo - total_ammo, settings.give_ammo);
+		
+		int ret = pOther.GiveAmmo( should_give, ammo_type, settings.max_ammo );
+		if (ret != -1)
+		{
+			println("GAVE: " + ret);
+			settings.pickup_snd.play(self, CHAN_ITEM);
+			return true;
+		}
+		return false;
 	}
 }
