@@ -217,7 +217,9 @@ string g_watersplash_spr = "sprites/wep_smoke_01.spr";
 void WeaponCustomMapInit()
 {	
 	g_Game.PrecacheModel( g_watersplash_spr ); // used for water splash effect
+	
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom", "weapon_custom" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_ammo", "weapon_custom_ammo" );
 	
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_shoot", "weapon_custom_shoot" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_bullet", "weapon_custom_bullet" );
@@ -300,6 +302,7 @@ void WeaponCustomMapActive()
 // WeaponCustomBase will read this to get weapon_custom settings
 // Also let's us know which weapon slots are used (Auto weapon slot position depends on this)
 dictionary custom_weapons;
+dictionary custom_ammos;
 dictionary custom_weapon_shoots;
 dictionary custom_weapon_effects;
 
@@ -570,6 +573,10 @@ array<string> g_panim_refs = {
 	"rpg", "egon", "squeak", "hive", "bow", "minigun", "uzis", "m16", "sniper", "saw" 
 };
 
+array<string> g_ammo_types = {
+	"buckshot", "health", "556", "m40a1", "argrenades", "357", "9mm", "shock charges", "sporeclip", 
+	"uranium", "rockets", "bolts", "trip mine", "satchel charge", "hand grenade", "snarks", "hornets"
+};
 
 enum beam_alt_modes
 {
@@ -717,7 +724,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	string beam_impact_spr;
 	float beam_impact_spr_scale;
 	int beam_impact_spr_fps;
-	int beam_impact_spr_opacity;
+	Color beam_impact_spr_color;
 	int beam_ricochet_limit; // maximum number of ricochets
 	float beam_ammo_cooldown;
 	
@@ -730,16 +737,20 @@ class weapon_custom_shoot : ScriptBaseEntity
 	weapon_custom_user_effect@ user_effect2; // overcharge
 	weapon_custom_user_effect@ user_effect3; // cooldown
 	weapon_custom_user_effect@ user_effect4; // windup
+	weapon_custom_user_effect@ user_effect5; // toggle to
 	string user_effect1_str;
 	string user_effect2_str;
 	string user_effect3_str;
 	string user_effect4_str;
+	string user_effect5_str;
 	
 	float rico_angle;
 	Vector muzzle_flash_color;
 	Vector muzzle_flash_adv;
 	WeaponSound toggle_snd;
 	string toggle_txt;
+	int toggle_anim;
+	float toggle_cooldown;
 	
 	float windup_time;
 	float windup_min_time;
@@ -884,7 +895,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "beam_impact_spr")         beam_impact_spr = szValue;
 		else if (szKey == "beam_impact_spr_scale")   beam_impact_spr_scale = atof(szValue);
 		else if (szKey == "beam_impact_spr_fps")     beam_impact_spr_fps = atoi(szValue);
-		else if (szKey == "beam_impact_spr_opacity") beam_impact_spr_opacity = atoi(szValue);
+		else if (szKey == "beam_impact_spr_color")   beam_impact_spr_color = parseColor(szValue);
 		else if (szKey == "beam_ricochet_limit")     beam_ricochet_limit = atoi(szValue);
 		else if (szKey == "beam_ammo_cooldown")      beam_ammo_cooldown = atof(szValue);
 		
@@ -924,11 +935,14 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "user_effect2") 	  user_effect2_str = szValue;
 		else if (szKey == "user_effect3") 	  user_effect3_str = szValue;
 		else if (szKey == "user_effect4") 	  user_effect4_str = szValue;
+		else if (szKey == "user_effect5") 	  user_effect5_str = szValue;
 		
 		else if (szKey == "rico_angle") 	  rico_angle = atof(szValue);		
 		else if (szKey == "muzzle_flash_color") muzzle_flash_color = parseVector(szValue);		
 		else if (szKey == "muzzle_flash_adv")   muzzle_flash_adv = parseVector(szValue);		
 		else if (szKey == "toggle_snd")   toggle_snd.file = szValue;	
+		else if (szKey == "toggle_anim")   toggle_anim = atoi(szValue);	
+		else if (szKey == "toggle_cooldown")   toggle_cooldown = atof(szValue);	
 		else if (szKey == "toggle_txt")   toggle_txt = szValue;		
 		
 		else if (szKey == "windup_time") 	    windup_time = atof(szValue);
@@ -1004,6 +1018,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		@user_effect2 = loadUserEffectSettings(user_effect2, user_effect2_str);
 		@user_effect3 = loadUserEffectSettings(user_effect3, user_effect3_str);
 		@user_effect4 = loadUserEffectSettings(user_effect4, user_effect4_str);
+		@user_effect5 = loadUserEffectSettings(user_effect5, user_effect5_str);
 	}
 	
 	int damageType(int defaultType)
@@ -1207,6 +1222,8 @@ class weapon_custom : ScriptBaseEntity
 	string hud_sprite;
 	string hud_sprite_folder;
 	string laser_sprite;
+	float laser_sprite_scale;
+	Color laser_sprite_color;
 	int wpn_w_model_body;
 	int zoom_fov;
 	int max_live_projectiles = 0;
@@ -1219,6 +1236,7 @@ class weapon_custom : ScriptBaseEntity
 	
 	float movespeed;
 	
+	WeaponSound deploy_snd;
 	WeaponSound reload_snd;
 	WeaponSound reload_start_snd;
 	WeaponSound reload_end_snd;
@@ -1256,6 +1274,9 @@ class weapon_custom : ScriptBaseEntity
 	array<weapon_custom_shoot@> alt_fire_settings =
 	{ weapon_custom_shoot(), weapon_custom_shoot(), weapon_custom_shoot() }; 
 	
+	//weapon_custom_ammo@ primary_custom_ammo;
+	//weapon_custom_ammo@ secondary_custom_ammo;
+	
 	bool KeyValue( const string& in szKey, const string& in szValue )
 	{
 		// Only custom keyvalues get sent here
@@ -1284,6 +1305,7 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "tertiary_empty_snd") tertiary_empty_snd.file = szValue;
 		else if (szKey == "tertiary_ammo") tertiary_ammo_type = atoi(szValue);
 		
+		else if (szKey == "deploy_snd") deploy_snd.file = szValue;
 		else if (szKey == "reload_snd") reload_snd.file = szValue;
 		else if (szKey == "reload_start_snd") reload_start_snd.file = szValue;
 		else if (szKey == "reload_end_snd") reload_end_snd.file = szValue;
@@ -1316,6 +1338,8 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "zoom_fov") zoom_fov = atoi(szValue);
 		
 		else if (szKey == "laser_sprite") laser_sprite = szValue;
+		else if (szKey == "laser_sprite_scale") laser_sprite_scale = atof(szValue);
+		else if (szKey == "laser_sprite_color") laser_sprite_color = parseColor(szValue);
 		else if (szKey == "hud_sprite") hud_sprite = szValue;
 		else if (szKey == "sprite_directory") hud_sprite_folder = szValue;
 		else if (szKey == "weapon_priority") priority = atoi(szValue);
@@ -1481,6 +1505,7 @@ class weapon_custom : ScriptBaseEntity
 		PrecacheSound(primary_empty_snd.file);
 		PrecacheSound(secondary_reload_snd.file);
 		PrecacheSound(secondary_empty_snd.file);
+		PrecacheSound(deploy_snd.file);
 		PrecacheSound(reload_snd.file);
 		PrecacheSound(reload_start_snd.file);
 		PrecacheSound(reload_end_snd.file);
@@ -1491,6 +1516,73 @@ class weapon_custom : ScriptBaseEntity
 		PrecacheModel(laser_sprite);
 	}
 };
+
+class weapon_custom_ammo : ScriptBaseEntity
+{
+	string ammo_classname;
+	string w_model;
+	WeaponSound pickup_snd;
+	int give_ammo;
+	int max_ammo;
+	int ammo_type;
+	string custom_ammo_type;
+	
+	bool KeyValue( const string& in szKey, const string& in szValue )
+	{
+		if (szKey == "ammo_name") ammo_classname = szValue;
+		
+		else if (szKey == "w_model") w_model = szValue;
+		else if (szKey == "pickup_snd") pickup_snd.file = szValue;
+		else if (szKey == "give_ammo") give_ammo = atoi(szValue);
+		else if (szKey == "max_ammo") max_ammo = atoi(szValue);
+		else if (szKey == "ammo_type") ammo_type = atoi(szValue);
+		else if (szKey == "custom_ammo_type") custom_ammo_type = szValue;
+
+		else return BaseClass.KeyValue( szKey, szValue );
+		
+		return true;
+	}
+	
+	void loadExternalSoundSettings()
+	{
+		loadSoundSettings(pickup_snd);
+	}
+	
+	void Spawn()
+	{
+		if (ammo_classname.Length() > 0)
+		{		
+			custom_ammos[ammo_classname] = @this;
+			g_CustomEntityFuncs.RegisterCustomEntity( "AmmoCustomBase", ammo_classname );
+			Precache();
+		}
+		else
+			println("weapon_custom creation failed. No weapon_class specified");
+	}
+	
+	void PrecacheModel(string model)
+	{
+		if (model.Length() > 0) {
+			debugln("Precaching model for " + ammo_classname + ": " + model);
+			g_Game.PrecacheModel( model );
+		}
+	}
+	
+	void PrecacheSound(string sound)
+	{
+		if (sound.Length() > 0) {
+			debugln("Precaching sound for " + ammo_classname + ": " + sound);
+			g_SoundSystem.PrecacheSound( sound );
+		}
+	}
+	
+	void Precache()
+	{
+		PrecacheSound(pickup_snd.file);
+		PrecacheModel(w_model);
+	}
+};
+
 
 class weapon_custom_sound : ScriptBaseEntity
 {	
@@ -1841,6 +1933,8 @@ class weapon_custom_user_effect : ScriptBaseEntity
 	string w_model;
 	int w_model_body;
 	
+	string hud_text;
+	
 	int triggerstate;
 
 	bool KeyValue( const string& in szKey, const string& in szValue )
@@ -1853,6 +1947,7 @@ class weapon_custom_user_effect : ScriptBaseEntity
 		else if (szKey == "damage_type2") damage_type2 = atoi(szValue);
 		else if (szKey == "gib_type")     gib_type = atoi(szValue);
 		else if (szKey == "primary_mode") primary_mode = atoi(szValue);
+		else if (szKey == "hud_text")  hud_text = szValue;
 		
 		else if (szKey == "beam_mode")   beam_mode = atoi(szValue);
 		else if (szKey == "beam_type")   beam_type = atoi(szValue);

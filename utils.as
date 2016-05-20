@@ -512,6 +512,17 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		{
 			CBaseEntity@ tar = target;
 			
+			if (!tar.IsBSPModel() and !tar.IsAlive())
+			{
+				attached = false;
+				target = null;
+				if (shoot_opts.hook_type != HOOK_DISABLED)
+				{
+					uninstall_steam_and_kill_yourself();
+					return;
+				}
+			}
+			
 			// rotate position around target
 			Vector newOri = attachStartOri + (tar.pev.origin - targetStartOri);
 			newOri = rotatePoint(newOri - tar.pev.origin, -tar.pev.angles) + tar.pev.origin;
@@ -550,6 +561,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 				bool pullMode = shoot_opts.hook_pull_mode == HOOK_MODE_PULL or 
 								shoot_opts.hook_pull_mode == HOOK_MODE_PULL_LEAST_WEIGHT;
 				bool pullUser = shoot_opts.hook_pull_mode == HOOK_MODE_PULL_LEAST_WEIGHT and playerSize <= size;
+				pullUser = pullUser or shoot_opts.hook_pull_mode == HOOK_MODE_PULL or tar.IsBSPModel();
 				
 				if (pullMode)
 				{
@@ -566,7 +578,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 					if (owner.pev.velocity.Length() > shoot_opts.hook_max_speed)
 						owner.pev.velocity = resizeVector(owner.pev.velocity, shoot_opts.hook_max_speed);
 					
-					if (shoot_opts.hook_pull_mode == HOOK_MODE_PULL and owner.pev.flags & FL_ONGROUND != 0 and dir.z > 0)
+					if (pullMode and owner.pev.flags & FL_ONGROUND != 0 and dir.z > 0)
 					{	
 						// The player is going to be stubborn and glue itself to the ground.
 						// Make sure that forcing the player upward won't jam it into something solid
@@ -670,7 +682,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 	
 	void DamageTarget(CBaseEntity@ ent)
 	{	
-		if (ent is null or ent.entindex() == 0)
+		if (ent is null or ent.entindex() == 0 or shoot_opts.shoot_type == SHOOT_MELEE)
 			return;
 		CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
 			
@@ -747,7 +759,7 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		}
 		else
 		{
-			if (shoot_opts.hook_targets == HOOK_WORLD_ONLY)
+			if (shoot_opts.hook_targets == HOOK_WORLD_ONLY or !pOther.IsAlive())
 				return false;
 		}
 		
@@ -1199,19 +1211,24 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 	// firstperson anim
 	if (wep !is null and plr.IsAlive())
 	{
-		if (effect.v_model.Length() > 0)
+		if (effect.v_model.Length() > 0 or effect.p_model.Length() > 0 or effect.w_model.Length() > 0 or effect.w_model_body >= 0)
 		{
 			c_wep.v_model_override = effect.v_model;
 			c_wep.p_model_override = effect.p_model;
 			c_wep.w_model_override = effect.w_model;
-			if (c_wep.w_model_body_override >= 0)
+			if (effect.w_model_body >= 0)
 				c_wep.w_model_body_override = effect.w_model_body;
-			c_wep.Deploy();
+			c_wep.Deploy(true);
 		}
 		if (effect.wep_anim != -1)
-			wep.SendWeaponAnim( effect.wep_anim );
+			wep.SendWeaponAnim( effect.wep_anim, 0, c_wep.w_body() );
 			
 		c_wep.TogglePrimaryFire(effect.primary_mode);
+	}
+	
+	if (effect.hud_text.Length() > 0)
+	{
+		g_PlayerFuncs.PrintKeyBindingString(plr, effect.hud_text);
 	}
 	
 	// thirdperson anim
@@ -1492,6 +1509,8 @@ class WeaponSound
 	
 	void stop(CBaseEntity@ ent, SOUND_CHANNEL channel=CHAN_STATIC)
 	{
+		if (file.Length() <= 0)
+			return;
 		if (options !is null and options.pev.sequence > -1)
 			channel = SOUND_CHANNEL(options.pev.sequence);
 		g_SoundSystem.StopSound(ent.edict(), channel, file);
