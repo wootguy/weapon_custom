@@ -747,9 +747,6 @@ class weapon_custom_shoot : ScriptBaseEntity
 	float rico_angle;
 	Vector muzzle_flash_color;
 	Vector muzzle_flash_adv;
-	WeaponSound toggle_snd;
-	string toggle_txt;
-	int toggle_anim;
 	float toggle_cooldown;
 	
 	float windup_time;
@@ -940,10 +937,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "rico_angle") 	  rico_angle = atof(szValue);		
 		else if (szKey == "muzzle_flash_color") muzzle_flash_color = parseVector(szValue);		
 		else if (szKey == "muzzle_flash_adv")   muzzle_flash_adv = parseVector(szValue);		
-		else if (szKey == "toggle_snd")   toggle_snd.file = szValue;	
-		else if (szKey == "toggle_anim")   toggle_anim = atoi(szValue);	
-		else if (szKey == "toggle_cooldown")   toggle_cooldown = atof(szValue);	
-		else if (szKey == "toggle_txt")   toggle_txt = szValue;		
+		else if (szKey == "toggle_cooldown")   toggle_cooldown = atof(szValue);		
 		
 		else if (szKey == "windup_time") 	    windup_time = atof(szValue);
 		else if (szKey == "windup_min_time") 	windup_min_time = atof(szValue);
@@ -1002,7 +996,6 @@ class weapon_custom_shoot : ScriptBaseEntity
 		loadSoundSettings(hook_snd);
 		loadSoundSettings(hook_snd2);
 		loadSoundSettings(projectile.move_snd);
-		loadSoundSettings(toggle_snd);
 		loadSoundSettings(shell_delay_snd);
 		loadSoundSettings(shoot_empty_snd);
 	}
@@ -1135,7 +1128,6 @@ class weapon_custom_shoot : ScriptBaseEntity
 		PrecacheSound(windup_loop_snd.file);
 		PrecacheSound(hook_snd.file);
 		PrecacheSound(hook_snd2.file);
-		PrecacheSound(toggle_snd.file);
 		PrecacheSound(shell_delay_snd.file);
 		PrecacheSound(shoot_empty_snd.file);
 			

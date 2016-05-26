@@ -2277,9 +2277,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		weapon_custom_shoot@ p_alt_opts = @settings.alt_fire_settings[0];
 		
 		weapon_custom_shoot@ next_p_opts = primaryAlt ? @p_alt_opts : @p_opts;
-		next_p_opts.toggle_snd.play(self.m_pPlayer, CHAN_VOICE);
-		if (next_p_opts.toggle_txt.Length() > 0)
-			g_PlayerFuncs.PrintKeyBindingString(self.m_pPlayer, next_p_opts.toggle_txt);
 		
 		EHandle h_plr = self.m_pPlayer;
 		EHandle h_wep = cast<CBaseEntity@>(self);
