@@ -564,8 +564,9 @@
 	
 	hook_type(choices) : "Hook Type" : 0 =
 	[
-		0: "No Hook"
+		0 : "No Hook"
 		1 : "Projectile Hook"
+		//2 : "Instant Hook"
 	]
 	hook_pull_mode(choices) : "Hook Mode" : 0 =
 	[
@@ -674,8 +675,6 @@
 	]
 	effect2_name(string) : "Projectile Custom Hit Monster Effect" : ""
 	bounce_effect_delay(string) : "Projectile Bounce Effect Min. Freq" : "0"
-	
-	projectile_impact_dmg(string) : "Projectile Custom Impact Damage" : "100"
 ]
 
 @BaseClass = ShootBeam
@@ -1110,8 +1109,8 @@
 	[
 		0 : "Disabled"
 		1 : "Atachment to Attachement"
-		2 : "Attachement to Point"
-		3 : "Point to Point"
+		//2 : "Attachement to Point"
+		//3 : "Point to Point"
 	]
 	beam_type(choices) : "Beam Type" : 0 =
 	[
@@ -1120,8 +1119,8 @@
 		2 : "Linear + Opaque"
 		3 : "Spiral + Opaque"
 	]
-	beam_start(string) : "Beam Start (RT UP FW / Attach Idx)" : ""
-	beam_end(string) : "Beam End (RT UP FW / Attach Idx)" : ""
+	beam_start(string) : "Beam Start (Attach Idx)" : ""
+	beam_end(string) : "Beam End (Attach Idx)" : ""
 	beam_time(string) : "Beam Duration (0 = constant)" : "0"
 	beam_spr(string) : "Beam Sprite" : "sprites/laserbeam.spr"
 	beam_color(color255) : "Beam Color (R G B A)" : "255 0 0 255"
@@ -1157,7 +1156,8 @@
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(255 64 64) base(ShootGeneral, ShootMelee) = weapon_custom_melee : "Custom weapon melee"
 [
-	effect1_name(string) : "Melee Impact Effect" : ""
+	effect1_name(string) : "Melee Impact World Effect" : ""
+	effect2_name(string) : "Melee Impact Monster Effect" : ""
 	
 	user_effect4(string) : "User Effect (Windup)" : ""
 	user_effect1(string) : "User Effect (Shoot)" : ""
