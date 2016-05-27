@@ -17,6 +17,7 @@
 	targetname(target_source) : "Name"
 	weapon_name(string) : "Weapon Class" : "weapon_test"
 	skin(integer) : "Clip Size (0 = none used)" : 80
+	default_ammo(integer) : "Default Ammo (-1 = full clip)" : -1
 	movespeed(string) : "Movement Speed Multiplier" : "1.0"
 	
 	primary_fire(string) : "Primary Fire"
@@ -91,7 +92,7 @@
 	user_effect1(string) : "Reload User Effect" : ""
 	user_effect2(string) : "Reload Empty User Effect" : ""
 	
-	deploy_time(string) : "Deploy Time" : "1"
+	deploy_time(string) : "Deploy Time" : "0.5"
 	deploy_anim(string) : "Deploy Animation" : ""
 	deploy_snd(string) : "Deploy Sound" : ""
 	idle_anims(string) : "Idle Animations" : ""
@@ -993,6 +994,7 @@
 	spawnflags(Flags) =
 	[
 		1 : "User Only Sounds" : 0
+		//2 : "Stop Active Effects" : 0
 	]
 	
 	targetname(target_source) : "Name"
