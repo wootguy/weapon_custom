@@ -1,202 +1,6 @@
 #include "utils"
 #include "WeaponCustomBase"
 
-/*
- * Defines and initializes the weapon_custom and weapon_custom_shoot entites.
- */
-
-void printIfNotEmpty(string name, string s)
-{
-	if (s.Length() > 0)
-		println(name + ": " + s);
-}
-
-void printIfNotZero(string name, Vector v)
-{
-	if (v.x != 0 or v.y != 0 or v.z != 0)
-	{
-		//if (v.x != 0) println("X IS NONZERO");
-		//if (v.y != 0) println("Y IS NONZERO");
-		//if (v.z != 0) println("Z IS NONZERO");
-		println(name + ": " + v.x + " " + v.y + " " + v.z);
-	}
-}
-
-void printIfNotZero(string name, float f)
-{
-	if (f != 0)
-		println(name + ": " + f);
-}
-
-void printIfNotZero(string name, int i)
-{
-	if (i != 0)
-		println(name + ": " + i);
-}
-
-void printIfNotNull(string name, edict_t@ e)
-{
-	CBaseEntity@ ent = g_EntityFuncs.Instance( e );
-	if (e !is null)
-		println(name + ": " + ent.pev.targetname + " (" + ent.pev.classname + ")");
-}
- 
-void scanEnt(CBaseEntity@ ent)
-{
-	println("SCAN ENT: " + ent.pev.targetname + " (" + ent.pev.classname + ")");
-	
-	printIfNotEmpty("globalname", ent.pev.globalname);
-	printIfNotEmpty("model", ent.pev.model);
-	printIfNotEmpty("target", ent.pev.target);
-	printIfNotEmpty("netname", ent.pev.netname);
-	printIfNotEmpty("message", ent.pev.message);
-	printIfNotEmpty("noise", ent.pev.noise);
-	printIfNotEmpty("noise1", ent.pev.noise1);
-	printIfNotEmpty("noise2", ent.pev.noise2);
-	printIfNotEmpty("noise3", ent.pev.noise3);
-	printIfNotEmpty("noise3", ent.pev.noise3);
-	printIfNotEmpty("viewmodel", ent.pev.viewmodel);
-	printIfNotEmpty("weaponmodel", ent.pev.weaponmodel);
-	
-	printIfNotZero("controller[0]", ent.pev.controller[0]);
-	printIfNotZero("controller[1]", ent.pev.controller[1]);
-	printIfNotZero("controller[2]", ent.pev.controller[2]);
-	printIfNotZero("controller[3]", ent.pev.controller[3]);
-	
-	printIfNotZero("blending[0]", ent.pev.blending[0]);
-	printIfNotZero("blending[1]", ent.pev.blending[1]);
-	
-	printIfNotNull("chain", ent.pev.chain);
-	printIfNotNull("dmg_inflictor", ent.pev.dmg_inflictor);
-	printIfNotNull("enemy", ent.pev.enemy);
-	printIfNotNull("aiment", ent.pev.aiment);
-	printIfNotNull("owner", ent.pev.owner);
-	printIfNotNull("groundentity", ent.pev.groundentity);
-	printIfNotNull("euser1", ent.pev.euser1);
-	printIfNotNull("euser2", ent.pev.euser2);
-	printIfNotNull("euser3", ent.pev.euser3);
-	printIfNotNull("euser4", ent.pev.euser4);
-	
-	//printIfNotZero("origin", ent.pev.origin);
-	printIfNotZero("oldorigin", ent.pev.oldorigin);
-	//printIfNotZero("velocity", ent.pev.velocity);
-	printIfNotZero("basevelocity", ent.pev.basevelocity);
-	printIfNotZero("movedir", ent.pev.movedir);
-	//printIfNotZero("angles", ent.pev.angles);
-	printIfNotZero("avelocity", ent.pev.avelocity);
-	printIfNotZero("punchangle", ent.pev.punchangle);
-	printIfNotZero("v_angle", ent.pev.v_angle);
-	printIfNotZero("endpos", ent.pev.endpos);
-	printIfNotZero("startpos", ent.pev.startpos);
-	printIfNotZero("absmin", ent.pev.absmin);
-	printIfNotZero("absmax", ent.pev.absmax);
-	printIfNotZero("mins", ent.pev.mins);
-	printIfNotZero("maxs", ent.pev.maxs);
-	printIfNotZero("size", ent.pev.size);
-	printIfNotZero("rendercolor", ent.pev.rendercolor);
-	printIfNotZero("view_ofs", ent.pev.view_ofs);
-	printIfNotZero("vuser1", ent.pev.vuser1);
-	printIfNotZero("vuser2", ent.pev.vuser2);
-	printIfNotZero("vuser3", ent.pev.vuser3);
-	printIfNotZero("vuser4", ent.pev.vuser4);
-	
-	printIfNotZero("impacttime", ent.pev.impacttime);
-	printIfNotZero("starttime", ent.pev.starttime);
-	printIfNotZero("idealpitch", ent.pev.idealpitch);
-	printIfNotZero("pitch_speed", ent.pev.pitch_speed);
-	printIfNotZero("ideal_yaw", ent.pev.ideal_yaw);
-	printIfNotZero("yaw_speed", ent.pev.yaw_speed);
-	printIfNotZero("ltime", ent.pev.ltime);
-	printIfNotZero("nextthink", ent.pev.nextthink);
-	printIfNotZero("gravity", ent.pev.gravity);
-	printIfNotZero("friction", ent.pev.friction);
-	printIfNotZero("frame", ent.pev.frame);
-	printIfNotZero("animtime", ent.pev.animtime);
-	printIfNotZero("renderamt", ent.pev.renderamt);
-	printIfNotZero("health", ent.pev.health);
-	printIfNotZero("frags", ent.pev.frags);
-	printIfNotZero("max_health", ent.pev.max_health);
-	printIfNotZero("teleport_time", ent.pev.teleport_time);
-	printIfNotZero("armortype", ent.pev.armortype);
-	printIfNotZero("armorvalue", ent.pev.armorvalue);
-	printIfNotZero("dmg_take", ent.pev.dmg_take);
-	printIfNotZero("dmg_save", ent.pev.dmg_save);
-	printIfNotZero("dmg", ent.pev.dmg);
-	printIfNotZero("dmgtime", ent.pev.dmgtime);
-	printIfNotZero("speed", ent.pev.speed);
-	printIfNotZero("air_finished", ent.pev.air_finished);
-	printIfNotZero("pain_finished", ent.pev.pain_finished);
-	printIfNotZero("radsuit_finished", ent.pev.radsuit_finished);
-	printIfNotZero("maxspeed", ent.pev.maxspeed);
-	printIfNotZero("flFallVelocity", ent.pev.flFallVelocity);
-	printIfNotZero("fuser1", ent.pev.fuser1);
-	printIfNotZero("fuser2", ent.pev.fuser2);
-	printIfNotZero("fuser3", ent.pev.fuser3);
-	printIfNotZero("fuser4", ent.pev.fuser4);
-	
-	printIfNotZero("fixangle", ent.pev.fixangle);
-	printIfNotZero("modelindex", ent.pev.modelindex);
-	printIfNotZero("movetype", ent.pev.movetype);
-	printIfNotZero("solid", ent.pev.solid);
-	printIfNotZero("skin", ent.pev.skin);
-	printIfNotZero("body", ent.pev.body);
-	printIfNotZero("effects", ent.pev.effects);
-	printIfNotZero("light_level", ent.pev.light_level);
-	printIfNotZero("sequence", ent.pev.sequence);
-	printIfNotZero("gaitsequence", ent.pev.gaitsequence);
-	printIfNotZero("rendermode", ent.pev.rendermode);
-	printIfNotZero("renderfx", ent.pev.renderfx);
-	printIfNotZero("weapons", ent.pev.weapons);
-	printIfNotZero("takedamage", ent.pev.takedamage);
-	printIfNotZero("deadflag", ent.pev.deadflag);
-	printIfNotZero("button", ent.pev.button);
-	printIfNotZero("impulse", ent.pev.impulse);
-	printIfNotZero("spawnflags", ent.pev.spawnflags);
-	printIfNotZero("flags", ent.pev.flags);
-	printIfNotZero("colormap", ent.pev.colormap);
-	printIfNotZero("team", ent.pev.team);
-	printIfNotZero("waterlevel", ent.pev.waterlevel);
-	printIfNotZero("watertype", ent.pev.watertype);
-	printIfNotZero("playerclass", ent.pev.playerclass);
-	printIfNotZero("weaponanim", ent.pev.weaponanim);
-	printIfNotZero("pushmsec", ent.pev.pushmsec);
-	printIfNotZero("bInDuck", ent.pev.bInDuck);
-	printIfNotZero("flTimeStepSound", ent.pev.flTimeStepSound);
-	printIfNotZero("flSwimTime", ent.pev.flSwimTime);
-	printIfNotZero("flDuckTime", ent.pev.flDuckTime);
-	printIfNotZero("iStepLeft", ent.pev.iStepLeft);
-	printIfNotZero("gamestate", ent.pev.gamestate);
-	printIfNotZero("oldbuttons", ent.pev.oldbuttons);
-	printIfNotZero("groupinfo", ent.pev.groupinfo);
-	printIfNotZero("iuser1", ent.pev.iuser1);
-	printIfNotZero("iuser2", ent.pev.iuser2);
-	printIfNotZero("iuser3", ent.pev.iuser3);
-	printIfNotZero("iuser4", ent.pev.iuser4);
-}
- 
-void test()
-{
-	CBaseEntity@ ent = null;
-	do {
-		@ent = g_EntityFuncs.FindEntityByClassname(ent, "monster_satchel"); 
-
-		if (ent !is null)
-		{
-			println("got1: " + ent.pev.velocity.Length());
-			//ent.pev.flags |= 4096 | FL_NO`WEAPONS;
-			//ent.pev.solid = SOLID_NOT;
-			//CBeam@ beam = cast<CBeam@>(ent);
-			//int r, g, b;
-			//beam.GetColor(r, g, b);
-			//println("shock: " + beam.GetNoise());
-			//scanEnt(ent);
-			//ent.pev.body = 3;
-			//ent.pev.sequence = 8;
-			// do nothing
-		}
-	} while (ent !is null);
-}
- 
 string g_watersplash_spr = "sprites/wep_smoke_01.spr";
 
 void WeaponCustomMapInit()
@@ -334,6 +138,7 @@ int FL_EFFECT_TELEPORT = 1024;
 
 // User effect flags
 int FL_UEFFECT_USER_SOUNDS = 1;
+int FL_UEFFECT_KILL_ACTIVE = 2;
 
 // shoot sound flags
 int FL_SOUND_NO_WATER_EFFECT = 1;
@@ -1179,6 +984,7 @@ class weapon_custom : ScriptBaseEntity
 	string primary_ammo_type;
 	float primary_regen_time;
 	int primary_regen_amt;
+	int default_ammo;
 	
 	int secondary_action;
 	string secondary_fire;
@@ -1260,6 +1066,7 @@ class weapon_custom : ScriptBaseEntity
 		if (szKey == "weapon_name") weapon_classname = szValue;
 		
 		else if (szKey == "movespeed") movespeed = atof(szValue);
+		else if (szKey == "default_ammo") default_ammo = atoi(szValue);
 		
 		else if (szKey == "primary_fire") primary_fire = szValue;
 		else if (szKey == "primary_alt_fire") primary_alt_fire = szValue;
@@ -1593,6 +1400,15 @@ class weapon_custom_sound : ScriptBaseEntity
 	{
 		PrecacheSound(pev.message);
 	}
+
+	void Use(CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float flValue = 0.0f)
+	{
+		WeaponSound snd;
+		snd.file = pev.message;
+		@snd.options = @this;
+		
+		snd.play(pev.origin);
+	}
 };
 
 class weapon_custom_effect : ScriptBaseEntity
@@ -1845,6 +1661,13 @@ class weapon_custom_effect : ScriptBaseEntity
 		PrecacheModel(glow_spr);	
 		PrecacheModel(spray_sprite);	
 	}
+
+	void Use(CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float flValue = 0.0f)
+	{
+		EHandle h_ent = self;
+		Math.MakeVectors( pev.angles );
+		custom_effect(pev.origin, @this, self, h_ent, h_ent, g_Engine.v_forward);
+	}
 };
 
 class weapon_custom_user_effect : ScriptBaseEntity
@@ -2038,5 +1861,19 @@ class weapon_custom_user_effect : ScriptBaseEntity
 		PrecacheModel( v_model );	
 		PrecacheModel( p_model );	
 		PrecacheModel( w_model );	
+	}
+
+	void Use(CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float flValue = 0.0f)
+	{
+		EHandle h_plr;
+		EHandle h_wep = null;
+		
+		if (pCaller !is null and pCaller.IsPlayer())
+			h_plr = pCaller;
+		else
+			h_plr = pActivator;
+		
+		if (pActivator !is null and pActivator.IsPlayer() or pCaller !is null and pCaller.IsPlayer())
+			custom_user_effect(h_plr, h_wep, @this);
 	}
 };
