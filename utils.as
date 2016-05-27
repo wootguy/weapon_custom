@@ -845,24 +845,6 @@ int getRandomPitch(int variance)
 	return Math.RandomLong(100-variance, 100+variance);
 }
 
-void poisonDamage(EHandle target, EHandle attacker, float damage)
-{
-	if (!target)
-		return;
-	if (!attacker)
-		return;
-		
-	CBaseEntity@ targetEnt = target;
-	CBaseEntity@ attackEnt = attacker;
-		
-	println("WOW BOTH HANDLES OK " + damage);
-	//g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
-	//TraceResult tr;
-	//targetEnt.TraceAttack(attackEnt.pev, damage, Vector(0,0,1), tr, DMG_POISON);
-	targetEnt.TakeDamage(targetEnt.pev, attackEnt.pev, damage, DMG_POISON);
-	//g_WeaponFuncs.ApplyMultiDamage(pHit.pev, self.m_pPlayer.pev);
-}
-
 void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creator, EHandle target,
 					EHandle owner, Vector vDir, DecalTarget@ dt=null, bool delayFinished=false)
 {
@@ -1016,14 +998,6 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creato
 	if (rico_snd !is null)
 		rico_snd.play(pos, CHAN_STATIC);
 	
-	/*
-	int poisionCount = int(effect.poison_time / effect.poison_delay);
-	if (effect.poison_damage > 0 and poisionCount > 0)
-	{
-		float dmg = effect.poison_damage;
-		g_Scheduler.SetInterval("poisonDamage", effect.poison_delay, poisionCount, target, owner, dmg);
-	}
-	*/
 	if (effect.next_effect !is null)
 		custom_effect(pos, effect.next_effect, creator, target, owner, vDir, dt, false);
 }
@@ -1152,7 +1126,7 @@ void player_revert_glow(EHandle h_plr, Vector oldGlow, float oldGlowAmt, bool us
 void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@ effect, 
 						bool delayFinished=false)
 {
-	if (effect is null or !h_plr or !h_wep)
+	if (effect is null or !h_plr)
 		return;
 		
 	CBaseEntity@ plrEnt = h_plr;
@@ -1165,6 +1139,11 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 	{
 		g_Scheduler.SetTimeout("custom_user_effect", effect.delay, h_plr, h_wep, effect, true);
 		return;
+	}
+	
+	if (effect.pev.spawnflags & FL_UEFFECT_KILL_ACTIVE != 0)
+	{
+		// TODO: Kill active effects
 	}
 	
 	WeaponSound@ snd = effect.getRandomSound();
@@ -1209,7 +1188,7 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 		plr.ShowOverheadSprite(effect.action_sprite, effect.action_sprite_height, effect.action_sprite_time);
 	
 	// firstperson anim
-	if (wep !is null and plr.IsAlive())
+	if (h_wep and wep !is null and plr.IsAlive())
 	{
 		if (effect.v_model.Length() > 0 or effect.p_model.Length() > 0 or effect.w_model.Length() > 0 or effect.w_model_body >= 0)
 		{

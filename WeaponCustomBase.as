@@ -100,7 +100,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		Precache();
 		g_EntityFuncs.SetModel( self, settings.wpn_w_model );
 
-		self.m_iDefaultAmmo = settings.clip_size();
+		self.m_iDefaultAmmo = settings.default_ammo;
+		if (self.m_iDefaultAmmo == -1)
+			self.m_iDefaultAmmo = settings.clip_size();		
 		
 		self.FallInit();
 		SetThink( ThinkFunction( WeaponThink ) );
@@ -223,7 +225,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		if (!skipDelay)
 		{
-			self.m_flTimeWeaponIdle = WeaponTimeBase() + settings.deploy_time;		   
+			self.m_flTimeWeaponIdle = WeaponTimeBase() + settings.deploy_time + 0.5f;		   
 			deployTime = g_Engine.time;
 		}
 		
@@ -265,7 +267,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		//CBaseEntity@ ent = cast<CBaseEntity@>(self);
 		//monitorWeaponbox(@ent);
 		
-		println("LE DROP ITEM");
+		//println("LE DROP ITEM");
 		
 		return self;
 	}
@@ -728,7 +730,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			
 			if (liveProjectiles <= 0 and AmmoLeft(active_ammo_type) <= 0 and self.m_iClip < 0)
 			{
-				println("KILL");
 				g_Scheduler.SetTimeout( "removeWeapon", Math.min(0, (deathTime - g_Engine.time)), @self );
 			}
 		}
@@ -974,8 +975,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 							Color C = Color(A.r + dr, A.g + dg, A.b + db, A.a + da);
 							ricobeam.SetColor(C.r, C.g, C.b);
 							ricobeam.SetBrightness(C.a);
-							if (beam_opts.alt_mode == BEAM_ALT_RANDOM)
-								println(C.ToString());
 						}
 						{	// width interp
 							int a = beam_opts.width;
@@ -1838,7 +1837,19 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			//self.m_pPlayer.pev.framerate = 0.5f;
 		}
 		else if (shouldPlayAttackAnim)
-			self.m_pPlayer.SetAnimation( PLAYER_ATTACK1 );
+		{
+			if (settings.player_anims == ANIM_REF_UZIS)
+			{
+				// For some reason the dual uzi shooting animation uses a different reference set.
+				self.m_pPlayer.m_Activity = ACT_RELOAD;
+				self.m_pPlayer.pev.frame = 0;
+				self.m_pPlayer.pev.sequence = 132;
+				self.m_pPlayer.ResetSequenceInfo();
+				//self.m_pPlayer.pev.framerate = 0.5f;
+			}
+			else
+				self.m_pPlayer.SetAnimation( PLAYER_ATTACK1 );
+		}
 		
 		// recoil
 		self.m_pPlayer.pev.punchangle.x = -Math.RandomFloat(active_opts.recoil.x, active_opts.recoil.y);
@@ -2423,8 +2434,17 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			unhideLaserTime = WeaponTimeBase() + reload_time;
 		}
 		
-		//Set 3rd person reloading animation -Sniper
-		BaseClass.Reload();
+		if (settings.player_anims == ANIM_REF_UZIS)
+		{
+			// Only reload the right uzi since dual wielding doesn't work yet.
+			self.m_pPlayer.m_Activity = ACT_RELOAD;
+			self.m_pPlayer.pev.frame = 0;
+			self.m_pPlayer.pev.sequence = 135;
+			self.m_pPlayer.ResetSequenceInfo();
+			//self.m_pPlayer.pev.framerate = 0.5f;
+		}
+		else
+			BaseClass.Reload();
 	}
 
 	void WeaponIdle()
@@ -2504,7 +2524,6 @@ class AmmoCustomBase : ScriptBasePlayerAmmoEntity
 		int ret = pOther.GiveAmmo( should_give, ammo_type, settings.max_ammo );
 		if (ret != -1)
 		{
-			println("GAVE: " + ret);
 			settings.pickup_snd.play(self, CHAN_ITEM);
 			return true;
 		}
