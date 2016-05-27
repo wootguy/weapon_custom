@@ -197,21 +197,6 @@ void test()
 	} while (ent !is null);
 }
  
-void MapInit()
-{
-	//g_Scheduler.SetInterval("test", 0.0);
-	WeaponCustomMapInit();
-	
-	// TODO: Fix really weird bug where manually placed weapons don't spawn.
-	// It seems like weapon_test spawns before weapon_test is registered and so it doesn't initialize properly
-	// Making a copy of the weapon in hammer seems to fix it (gets placed at the end of the entity list?)
-}
-
-void MapActivate()
-{
-	WeaponCustomMapActive();
-}
-
 string g_watersplash_spr = "sprites/wep_smoke_01.spr";
 
 void WeaponCustomMapInit()
@@ -234,7 +219,7 @@ void WeaponCustomMapInit()
 	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomProjectile", "custom_projectile" );
 }
 
-void WeaponCustomMapActive()
+void WeaponCustomMapActivate()
 {	
 	// Hook up weapon_custom with weapon_custom_shoot
 	array<string>@ keys = custom_weapons.getKeys();
