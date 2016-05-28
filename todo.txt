@@ -72,6 +72,7 @@ M16:
 
 Guass:
 - Charge up speed isn't quite the same
+- Doesn't shoot through glass, or kill you randomly when trying to do that.
 
 Egon:
 - The impact sprite is less laggy
