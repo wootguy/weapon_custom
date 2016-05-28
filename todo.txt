@@ -16,7 +16,6 @@ think function for non-custom projectiles, so that they can use more of the opti
 kingpin orb projectile
 projectile trigger on fire with projectile as activator
 muzzle particles
-blood effect happens in the distance if not direct projectile impact
 dont fire on miss/damage for beams
 projectiles disppear too early sometimes
 options for takedamage instead of traceattack (hornet)
@@ -27,14 +26,11 @@ multiple cooldown values for funky beats
 fire secondary/tertiary at the same time?
 Set keyvalue of target/trigger on impact
 shoot during windup (gets faster and faster)
-hook target filtering (world only/monsters only)
-move hook to center of monster like the original grapple does.
 bullet accuracy affected by movement (BulletAccuracy())
 EF_BRIGHTLIGHT for projectiles
 flashbang effect (blind whoever looks)
 penetration power
 regenerate ammo if another gun with same ammo type is not also regening
-projectile entity trigger target on fire
 parse material texture sounds for crowbar
 
 DOCS:
