@@ -304,7 +304,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			active_opts.windup_snd.stop(self.m_pPlayer, CHAN_VOICE);
 			active_opts.wind_down_snd.stop(self.m_pPlayer, CHAN_VOICE);
-			active_opts.windup_loop_snd.stop(self.m_pPlayer, CHAN_VOICE);	
+			active_opts.windup_loop_snd.stop(self.m_pPlayer, CHAN_VOICE);
+			active_opts.hook_snd.stop(self.m_pPlayer, CHAN_VOICE);
+			active_opts.hook_snd2.stop(self.m_pPlayer, CHAN_VOICE);
 		}
 		
 		for (uint i = 0; i < ubeams.length(); i++)

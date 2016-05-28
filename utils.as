@@ -753,7 +753,9 @@ class WeaponCustomProjectile : ScriptBaseEntity
 			if (shoot_opts.hook_texture_filter.Length() > 0)
 			{				
 				DecalTarget dt = getProjectileDecalTarget(self, Vector(0,0,0), 1);
-				if (dt.texture.Find(shoot_opts.hook_texture_filter) != 0)
+				string hitTex = dt.texture.ToLowercase();
+				string matchTex = shoot_opts.hook_texture_filter.ToLowercase();
+				if (hitTex.Find(matchTex) != 0)
 					return false;
 			}
 		}
