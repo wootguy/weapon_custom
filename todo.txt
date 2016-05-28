@@ -1,0 +1,95 @@
+Questions:
+
+1) Detect current skill level?
+2) Do monster bullets have a skill setting?
+3) Detect weapon slot is free or not?
+4) Green HUD ammo bars always empty?
+
+TODO:
+egon beams are disappearing sometimes. WHY???
+tripmine deplete not fast enough
+finish user beams
+
+Nice to have features:
+trigger shoot entities on their own
+think function for non-custom projectiles, so that they can use more of the options
+kingpin orb projectile
+projectile trigger on fire with projectile as activator
+muzzle particles
+blood effect happens in the distance if not direct projectile impact
+dont fire on miss/damage for beams
+projectiles disppear too early sometimes
+options for takedamage instead of traceattack (hornet)
+friendly fire option
+water splash options?
+projectile acceleration + max speed + easing + max speed time
+multiple cooldown values for funky beats
+fire secondary/tertiary at the same time?
+Set keyvalue of target/trigger on impact
+shoot during windup (gets faster and faster)
+hook target filtering (world only/monsters only)
+move hook to center of monster like the original grapple does.
+bullet accuracy affected by movement (BulletAccuracy())
+EF_BRIGHTLIGHT for projectiles
+flashbang effect (blind whoever looks)
+penetration power
+regenerate ammo if another gun with same ammo type is not also regening
+projectile entity trigger target on fire
+parse material texture sounds for crowbar
+
+DOCS:
+explain damage types
+
+Fixable Bugs:
+Projectiles w/ Hull size > 0 do weird things when colliding with enemies (blood sprites 50 feet away from impact)
+Projectiles sometimes get stuck inside enemies when set to bounce
+Hammer sometimes won't save a float value if its set to "0". Do "0.0" isntead. (projectile defaults)
+
+Unfixable Bugs:
+Ammo dropping doesn't work
+Custom ammo can't be picked up if no gun uses it (results in console errors)
+
+INACCURACIES:
+Crowbar:
+- No footstep sounds on impact with world
+- No electric mode
+- Throw sound doesn't loop fast enough
+- Cooldown for hitting flesh is slightly faster (0.25 vs 0.3). I think it's better this way.
+
+Wrench:
+- Decal isn't delayed. No point in doing this since it isn't also delayed for hitting monsters
+- Windup power increases faster, then eases out at the end. This makes more sense I think
+- Repairable breakables play damage sound when repaired
+
+Medkit:
+- Revive hitbox isn't quite the same
+
+Barnacle:
+- Can't overpower super strong gravity
+- Can pull downwards
+
+Uzi:
+- No dual wield
+
+M16:
+- No secondary reload
+
+Guass:
+- Charge up speed isn't quite the same
+
+Egon:
+- The impact sprite is less laggy
+
+Hornet:
+- Secondary only fires yellow hornets
+
+Tripmine:
+- The weapon doesn't get removed fast enough when you use the last one
+- World model doesn't work because there is none (SC uses v_model with body=3).
+
+Shock Rifle:
+- Secondary fire only has one beam and it doesn't chain between enemies
+- Doesn't explode when dropped or out of ammo
+
+Minigun:
+- Windup functions are more responsive
