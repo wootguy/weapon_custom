@@ -6,11 +6,13 @@ Questions:
 4) Green HUD ammo bars always empty?
 
 TODO:
+killing yourself against a wall doesn't stop looping sounds (egon)
 egon beams are disappearing sometimes. WHY???
 tripmine deplete not fast enough
 finish user beams
 
 Nice to have features:
+combine shoot ents for ultimate whatsits
 trigger shoot entities on their own
 think function for non-custom projectiles, so that they can use more of the options
 kingpin orb projectile
