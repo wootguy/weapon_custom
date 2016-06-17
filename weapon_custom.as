@@ -79,13 +79,30 @@ void WeaponCustomMapActivate()
 	}
 	
 	// Hook up ambient_generic with weapon_custom_shoot
-	keys = custom_weapon_shoots.getKeys();
-	for (uint i = 0; i < keys.length(); i++)
+	array<string>@ keys2 = custom_weapon_shoots.getKeys();
+	for (uint i = 0; i < keys2.length(); i++)
 	{
-		weapon_custom_shoot@ shoot = cast<weapon_custom_shoot@>( custom_weapon_shoots[keys[i]] );
+		weapon_custom_shoot@ shoot = cast<weapon_custom_shoot@>( custom_weapon_shoots[keys2[i]] );
 		shoot.loadExternalSoundSettings();
 		shoot.loadExternalEffectSettings();
 	}
+	
+	// Scan for mapper-placed weapons so we can respawn them after pickup
+	CBaseEntity@ ent = null;
+	do {
+		@ent = g_EntityFuncs.FindEntityByClassname(ent, "*"); 
+
+		if (ent !is null)
+		{				
+			for (uint i = 0; i < keys.length(); i++)
+			{
+				if (ent.pev.classname == keys[i])
+				{
+					ent.pev.iuser1 = 1; // flag this weapon for respawning
+				}
+			}
+		}
+	} while (ent !is null);
 }
 
 // WeaponCustomBase will read this to get weapon_custom settings
@@ -109,6 +126,10 @@ int FL_WEP_LASER_SIGHT = 64;
 int FL_WEP_NO_JUMP = 128;
 int FL_WEP_WAIT_FOR_PROJECTILES = 256;
 int FL_WEP_EXCLUSIVE_HOLD = 512;
+
+// mapper-placed weapon spawn flags
+int FL_DISABLE_RESPAWN = 1024;
+int FL_USE_ONLY = 256;
 
 // shoot spawn flags
 int FL_SHOOT_IF_NOT_DAMAGE = 1;

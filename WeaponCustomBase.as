@@ -91,6 +91,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	float baseMoveSpeed = -1; // reset to this after dropping weapon
 	
+	bool used = false; // set to true if the weapon has just been +USEd
+	
 	void Spawn()
 	{
 		if (settings is null) {
@@ -103,6 +105,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		self.m_iDefaultAmmo = settings.default_ammo;
 		if (self.m_iDefaultAmmo == -1)
 			self.m_iDefaultAmmo = settings.clip_size();		
+		self.m_iClip = self.m_iDefaultAmmo;
 		
 		self.FallInit();
 		SetThink( ThinkFunction( WeaponThink ) );
@@ -110,6 +113,32 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		self.m_bExclusiveHold = settings.pev.spawnflags & FL_WEP_EXCLUSIVE_HOLD != 0;
 	}
 
+	
+	bool AddWeapon()
+	{
+		if (pev.iuser1 == 1 and (pev.spawnflags & FL_DISABLE_RESPAWN) == 0)
+		{
+			println("LE RESPAWNED");
+			CBaseEntity@ ent = g_EntityFuncs.Create(settings.weapon_classname, pev.origin, pev.angles, false); 
+			g_SoundSystem.EmitSoundDyn( ent.edict(), CHAN_ITEM, "items/suitchargeok1.wav", 1.0, 
+														ATTN_NORM, 0, 150 );
+			ent.pev.iuser1 = 1; // respawn this one, too
+		}
+		
+		bool wasUsed = used;
+		used = false;
+		return pev.spawnflags & FL_USE_ONLY == 0 or wasUsed;
+	}
+	
+	void Use(CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float flValue = 0.0f)
+	{
+		if (pActivator == pCaller and pCaller.IsPlayer())
+		{
+			used = true; // allow pickups for time frame
+			self.Collect(pActivator);
+		}
+	}
+	
 	void Precache()
 	{
 		self.PrecacheCustomModels();
@@ -261,8 +290,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	CBasePlayerItem@ DropItem()
 	{
-		self.pev.body = 3;
-		self.pev.sequence = 8;
+		//self.pev.body = 3;
+		//self.pev.sequence = 8;
+		self.pev.iuser1 = 0;
 		
 		//CBaseEntity@ ent = cast<CBaseEntity@>(self);
 		//monitorWeaponbox(@ent);
