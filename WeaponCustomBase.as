@@ -93,6 +93,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	bool used = false; // set to true if the weapon has just been +USEd
 	
+	bool shouldRespawn = false;
+	
 	void Spawn()
 	{
 		if (settings is null) {
@@ -112,18 +114,19 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		self.m_bExclusiveHold = settings.pev.spawnflags & FL_WEP_EXCLUSIVE_HOLD != 0;
 		
-		pev.iuser1 = 1; // flag for respawning
+		shouldRespawn = true; // flag for respawning
 	}
 
 	
 	bool AddWeapon()
 	{
-		if (pev.iuser1 == 1 and (pev.spawnflags & FL_DISABLE_RESPAWN) == 0)
+		if (shouldRespawn and (pev.spawnflags & FL_DISABLE_RESPAWN) == 0)
 		{
 			CBaseEntity@ ent = g_EntityFuncs.Create(settings.weapon_classname, pev.origin, pev.angles, false); 
 			g_SoundSystem.EmitSoundDyn( ent.edict(), CHAN_ITEM, "items/suitchargeok1.wav", 1.0, 
 														ATTN_NORM, 0, 150 );
-			ent.pev.iuser1 = 1; // respawn this one, too
+			WeaponCustomBase@ wep = cast<WeaponCustomBase@>(CastToScriptClass(ent));
+			wep.shouldRespawn = true; // respawn this one, too
 		}
 		
 		bool wasUsed = used;
@@ -293,7 +296,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	{
 		//self.pev.body = 3;
 		//self.pev.sequence = 8;
-		self.pev.iuser1 = 0;
+		shouldRespawn = false;
 		
 		//CBaseEntity@ ent = cast<CBaseEntity@>(self);
 		//monitorWeaponbox(@ent);
