@@ -111,6 +111,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		SetThink( ThinkFunction( WeaponThink ) );
 		
 		self.m_bExclusiveHold = settings.pev.spawnflags & FL_WEP_EXCLUSIVE_HOLD != 0;
+		
+		pev.iuser1 = 1; // flag for respawning
 	}
 
 	
@@ -118,7 +120,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	{
 		if (pev.iuser1 == 1 and (pev.spawnflags & FL_DISABLE_RESPAWN) == 0)
 		{
-			println("LE RESPAWNED");
 			CBaseEntity@ ent = g_EntityFuncs.Create(settings.weapon_classname, pev.origin, pev.angles, false); 
 			g_SoundSystem.EmitSoundDyn( ent.edict(), CHAN_ITEM, "items/suitchargeok1.wav", 1.0, 
 														ATTN_NORM, 0, 150 );
