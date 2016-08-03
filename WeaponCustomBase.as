@@ -266,6 +266,17 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		settings.deploy_snd.play(self.m_pPlayer, CHAN_VOICE);
 		
+		// set max ammo counts for custom ammo
+		array<string>@ keys = custom_ammos.getKeys();
+		for (uint i = 0; i < keys.length(); i++)
+		{
+			weapon_custom_ammo@ ammo = cast<weapon_custom_ammo@>(custom_ammos[keys[i]]);
+			bool isCustomAmmo = ammo.ammo_type == -1;
+			
+			if (isCustomAmmo and ammo.custom_ammo_type == settings.primary_ammo_type)
+				self.m_pPlayer.SetMaxAmmo(ammo.custom_ammo_type, ammo.max_ammo);
+		}
+		
 		// delay fixes speed not working on minigum weapon switch and initial spawn
 		g_Scheduler.SetTimeout(@this, "applyPlayerSpeedMult", 0);
 		return ret;
@@ -1712,7 +1723,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			{
 				CancelBeam();			
 			}
-			
+			windupHeld = false;
 		}
 		else if (burstFiring)
 		{
@@ -2422,6 +2433,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void Reload()
 	{
+		if (settings.clip_size() == 0)
+			return;
 		if (!cooldownFinished() or reloading > 0)
 			return;
 			
