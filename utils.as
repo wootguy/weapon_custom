@@ -1956,7 +1956,7 @@ weapon_custom_effect@ loadEffectSettings(weapon_custom_effect@ effect, string na
 	} 
 	else if (string(searchStr).Length() > 0) 
 	{
-		println("WEAPON_CUSTOM ERROR: Failed to find weapon_custom_effect " + effect.name);
+		println("WEAPON_CUSTOM ERROR: Failed to find weapon_custom_effect " + searchStr);
 	}
 	return @effect;
 }
