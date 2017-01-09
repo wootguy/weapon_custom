@@ -1192,3 +1192,56 @@
 [
 
 ]
+
+
+@PointClass size(-32 -8 -16, 32 8 16 ) color(255 0 255) = monster_custom : "Custom monster settings"
+[
+	spawnflags(Flags) =
+	[
+		1 : "something" : 0
+	]
+	
+	targetname(target_source) : "Name"
+	monster_name(string) : "Monster Class" : "monster_test"
+	default_model(string) : "Default Model" : "models/zombie.mdl"
+	classify(choices) : "Default Classification" : 0 =
+	[
+		0 : "None"
+		1 : "Machine"
+		2 : "Player"
+		3 : "Human Passive"
+		4 : "Human Military"
+		5 : "Alien Military"
+		6 : "Alien Passive"
+		7 : "Alien Monster"
+		8 : "Alien Prey"
+		9 : "Alien Predator"
+		10 : "Insect"
+		11 : "Player Ally"
+		12 : "Player Hornet/Snark"
+		13 : "Alien Hornet/Snark"
+		14 : "X-Race"
+	]
+	bloodcolor(choices) : "Default Blood Color" : 1 =
+	[
+		-1 : "No Blood"
+		1 : "Red"
+		2 : "Yellow"
+	]
+	minhullsize(string) : "Default Min Hull Size (X Y Z)" : "-16 -16 0"
+	maxhullsize(string) : "Default Max Hull Size (X Y Z)" : "16 16 64"
+	display_name(string) : "Default Display Name" : "Custom Monster"
+	health(integer) : "Default Health" : 100
+	eye_height(string) : "Eye Height" : 32
+	fov(string) : "Field of View (degrees)" : 180
+	turn_speed(string) : "Turn Speed" : 90
+]
+
+@PointClass base(Monster) size(-24 -24 0, 24 24 32) color(255 0 255) = monster_custom_generic : "Custom Monster Spawn"
+[
+	monster_name(string) : "Custom Monster Class" : "monster_test"
+	spawnflags(Flags) =
+	[
+		32 : "SquadLeader" : 0
+	]
+]
