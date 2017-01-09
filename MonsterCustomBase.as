@@ -1,4 +1,5 @@
 #include "utils"
+#include "attack"
 
 class MonsterCustomBase : ScriptBaseMonsterEntity
 {
@@ -6,6 +7,8 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 	string monster_classname;
 	string displayname;
 	int bloodcolor = 0;
+	
+	WeaponState state;
 
 	void Spawn()
 	{
@@ -54,8 +57,12 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		pev.movetype = MOVETYPE_STEP;
 		
 		// Init AI
+		SetThink( ThinkFunction( MonsterThink ) );
 		self.m_MonsterState = MONSTERSTATE_NONE; 
 		self.MonsterInit(); 
+		
+		@state.c_mon = @this;
+		@state.user = self;
 	}
 	
 	bool KeyValue( const string& in szKey, const string& in szValue )
@@ -79,12 +86,27 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		return settings.default_class; 
 	}
 	
+	void MonsterThink()
+	{
+		AttackThink(state);
+		BaseClass.Think();
+	}
+	
 	void DoEvent(monster_custom_event@ event)
 	{
 		if (event.shoot_settings !is null)
 		{
 			println("SHOULD SHOOT "  + event.shoot_settings.pev.targetname);
+			@state.active_opts = @event.shoot_settings;
+			
+			DoAttack(state);
 		}
+	}
+	
+	// the gun or claw position
+	Vector attackPosition()
+	{
+		return pev.origin + Vector(0,0,settings.eye_height);
 	}
 
 	void HandleAnimEvent( MonsterEvent@ pEvent )

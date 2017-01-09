@@ -1,3 +1,5 @@
+#include "attack"
+
 class Color
 { 
 	uint8 r, g, b, a;
@@ -1257,7 +1259,7 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 	
 	if (effect.beam_mode != UBEAM_DISABLED and wep !is null)
 	{
-		c_wep.CreateUserBeam(@effect);
+		CreateUserBeam(c_wep.state, @effect);
 	}
 	
 	string targetStr = effect.pev.target;
@@ -1669,7 +1671,7 @@ bool isRepairable(CBaseEntity@ breakable)
 	return false;
 }
 
-bool shouldHealTarget(CBaseEntity@ target, CBaseEntity@ plr, weapon_custom_shoot@ shoot_opts)
+bool shouldHealTarget(CBaseEntity@ target, CBaseEntity@ healer, weapon_custom_shoot@ shoot_opts)
 {
 	if (shoot_opts.heal_mode == HEAL_OFF)
 		return false;
@@ -1687,7 +1689,7 @@ bool shouldHealTarget(CBaseEntity@ target, CBaseEntity@ plr, weapon_custom_shoot
 	if (target.IsBSPModel() and isRepairable(target) and (healBreakables or healAll))
 		return true;
 		
-	int rel = plr.IRelationship(target);
+	int rel = healer.IRelationship(target);
 	bool isFriendly = rel == R_AL or rel == R_NO;
 	bool healFriend = mode == HEAL_FRIENDS or mode == HEAL_REVIVE_FRIENDS or mode == HEAL_ALL;
 	bool healFoe = mode == HEAL_FOES or mode == HEAL_REVIVE_FOES or mode == HEAL_ALL;
@@ -1775,7 +1777,7 @@ float revive(CBaseEntity@ target, weapon_custom_shoot@ opts)
 	return target.pev.health;
 }
 
-CBaseEntity@ getReviveTarget(Vector center, float radius, CBasePlayer@ plr, weapon_custom_shoot@ shoot_opts)
+CBaseEntity@ getReviveTarget(Vector center, float radius, CBaseEntity@ healer, weapon_custom_shoot@ shoot_opts)
 {
 	CBaseEntity@ ent = null;
 	do {
@@ -1784,7 +1786,7 @@ CBaseEntity@ getReviveTarget(Vector center, float radius, CBasePlayer@ plr, weap
 		{
 			if (ent.IsMonster() and !ent.IsAlive())
 			{
-				if (shouldHealTarget(ent, plr, shoot_opts))
+				if (shouldHealTarget(ent, healer, shoot_opts))
 				{
 					return @ent;
 				}
