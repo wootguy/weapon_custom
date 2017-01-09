@@ -9,7 +9,8 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 
 	void Spawn()
 	{
-		if (settings is null) {
+		if (settings is null) 
+		{
 			if (self.pev.classname == "monster_custom_generic")
 			{
 				if (custom_monsters.exists(monster_classname))
@@ -18,7 +19,10 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 					println("MONSTER_CUSTOM ERROR: monster_custom_generic uses invalid class: " + monster_classname);
 			}
 			else
-				@settings = cast<monster_custom>( @custom_monsters[self.pev.classname] );
+			{
+				monster_classname = self.pev.classname;
+				@settings = cast<monster_custom>( @custom_monsters[monster_classname] );
+			}
 		}
 		
 		Precache(); 
@@ -70,15 +74,37 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 			g_Game.PrecacheModel( self.pev.model );
 	}
 
-	int	Classify ( void )
+	int Classify()
 	{
 		return settings.default_class; 
+	}
+	
+	void DoEvent(monster_custom_event@ event)
+	{
+		if (event.shoot_settings !is null)
+		{
+			println("SHOULD SHOOT "  + event.shoot_settings.pev.targetname);
+		}
 	}
 
 	void HandleAnimEvent( MonsterEvent@ pEvent )
 	{
-		println("DO EVENT: " + pEvent.event);
-		BaseClass.HandleAnimEvent( pEvent );
+		bool handled = false;
+		for (uint i = 0; i < settings.events.length(); i++)
+		{
+			monster_custom_event@ e = settings.events[i];
+			if (e.event == pEvent.event)
+			{
+				handled = true;
+				DoEvent(e);
+			}
+		}
+		
+		if (!handled)
+		{
+			println("MONSTER_CUSTOM: Unhandled event " + pEvent.event + " for " + monster_classname);
+			BaseClass.HandleAnimEvent( pEvent );
+		}
 	}
 	
 	Schedule@ GetSchedule( void )
