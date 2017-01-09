@@ -1194,7 +1194,7 @@
 ]
 
 
-@PointClass size(-32 -8 -16, 32 8 16 ) color(255 0 255) = monster_custom : "Custom monster settings"
+@PointClass size(-8 -8 -24, 8 8 24 ) color(0 255 128) = monster_custom : "Custom monster settings"
 [
 	spawnflags(Flags) =
 	[
@@ -1244,4 +1244,11 @@
 	[
 		32 : "SquadLeader" : 0
 	]
+]
+
+@PointClass size(-8 -8 -8, 8 8 8) color(255 255 0) = monster_custom_event : "Custom Monster Model Event Handler"
+[
+	monster_name(string) : "Custom Monster Class" : "monster_test"
+	event_num(integer) : "Event Number" : 0
+	shoot_ent(string) : "Attack" : ""
 ]
