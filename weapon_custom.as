@@ -1,6 +1,5 @@
 #include "utils"
 #include "WeaponCustomBase"
-#include "monster_custom"
 
 string g_watersplash_spr = "sprites/wep_smoke_01.spr";
 
@@ -22,8 +21,6 @@ void WeaponCustomMapInit()
 	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_user_effect", "weapon_custom_user_effect" );
 	
 	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomProjectile", "custom_projectile" );
-	
-	MonsterCustomMapInit();
 }
 
 void WeaponCustomMapActivate()
@@ -89,8 +86,6 @@ void WeaponCustomMapActivate()
 		shoot.loadExternalSoundSettings();
 		shoot.loadExternalEffectSettings();
 	}
-	
-	MonsterCustomMapActivate();
 }
 
 // WeaponCustomBase will read this to get weapon_custom settings
