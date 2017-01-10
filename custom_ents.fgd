@@ -1154,6 +1154,7 @@
 	user_effect1(string) : "User Effect (Shoot)" : ""
 	user_effect3(string) : "User Effect (Cooldown)" : ""
 	user_effect5(string) : "User Effect (Toggle)" : ""
+	user_effect6(string) : "User Effect (Victim)" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(255 64 64) base(ShootGeneral, ShootMelee) = weapon_custom_melee : "Custom weapon melee"
@@ -1165,6 +1166,7 @@
 	user_effect1(string) : "User Effect (Shoot)" : ""
 	user_effect3(string) : "User Effect (Cooldown)" : ""
 	user_effect5(string) : "User Effect (Toggle)" : ""
+	user_effect6(string) : "User Effect (Victim)" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(128 50 0) base(ShootGeneral, ShootProjectile) = weapon_custom_projectile : "Custom weapon projectile"
@@ -1175,6 +1177,7 @@
 	user_effect1(string) : "User Effect (Shoot)" : ""
 	user_effect3(string) : "User Effect (Cooldown)" : ""
 	user_effect5(string) : "User Effect (Toggle)" : ""
+	user_effect6(string) : "User Effect (Victim)" : ""
 ]
 
 @PointClass size(-32 -8 -8, 32 8 8 ) color(0 128 255) base(ShootGeneral, ShootBeam) = weapon_custom_beam : "Custom weapon beam"
@@ -1186,6 +1189,7 @@
 	user_effect1(string) : "User Effect (Shoot)" : ""
 	user_effect3(string) : "User Effect (Cooldown)" : ""
 	user_effect5(string) : "User Effect (Toggle)" : ""
+	user_effect6(string) : "User Effect (Victim)" : ""
 ]
 
 @PointClass size(-8 -8 -8, 8 8 8 ) color(128 255 0) base(ShootName, ShootEffects) = weapon_custom_effect : "Custom weapon effects"

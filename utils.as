@@ -1154,29 +1154,30 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 	if (snd !is null)
 	{
 		bool userOnly = effect.pev.spawnflags & FL_UEFFECT_USER_SOUNDS != 0;
-		snd.play(plr, CHAN_STATIC, 1, -1, 0, userOnly);
+		snd.play(plrEnt, CHAN_STATIC, 1, -1, 0, userOnly);
 	}
 	
 	// damage 'em
 	if (effect.self_damage != 0)
 	{
-		Vector oldVel = plr.pev.velocity;
-		plr.TakeDamage(plr.pev, plr.pev, effect.self_damage, effect.damageType());
+		Vector oldVel = plrEnt.pev.velocity;
+		plrEnt.TakeDamage(plrEnt.pev, plrEnt.pev, effect.self_damage, effect.damageType());
 		
 		// Idk why this even happens. No matter what the damage type is you get launched into the air
-		plr.pev.velocity = oldVel;
+		plrEnt.pev.velocity = oldVel;
 	}
 		
 	// punch 'em
-	plr.pev.punchangle = effect.punch_angle;
+	if (plrEnt.IsPlayer())
+		plrEnt.pev.punchangle = effect.punch_angle;
 	
 	// push 'em
-	Math.MakeVectors( plr.pev.v_angle );
+	Math.MakeVectors( plrEnt.pev.v_angle );
 	Vector push = effect.push_vel;
-	plr.pev.velocity = plr.pev.velocity + g_Engine.v_right*push.x + Vector(0,0,1)*push.y + g_Engine.v_forward*push.z;
+	plrEnt.pev.velocity = plrEnt.pev.velocity + g_Engine.v_right*push.x + Vector(0,0,1)*push.y + g_Engine.v_forward*push.z;
 
 	// rotate 'em
-	if (effect.add_angle != Vector(0,0,0) or effect.add_angle_rand != Vector(0,0,0))
+	if (effect.add_angle != Vector(0,0,0) or effect.add_angle_rand != Vector(0,0,0) and plrEnt.IsPlayer())
 	{
 		float startTime = g_Engine.time;
 		float endTime = startTime + effect.add_angle_time;
@@ -1184,15 +1185,15 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 		
 		Vector randAngle = Vector(Math.RandomFloat(-r.x, r.x), Math.RandomFloat(-r.y,r.y), Math.RandomFloat(-r.z,r.z));
 		Vector addAngle = effect.add_angle + randAngle;
-		g_Scheduler.SetTimeout("animate_view_angles", 0, h_plr, plr.pev.v_angle, addAngle, startTime, endTime);
+		g_Scheduler.SetTimeout("animate_view_angles", 0, h_plr, plrEnt.pev.v_angle, addAngle, startTime, endTime);
 	}
 	
 	// indicate something
-	if (effect.action_sprite.Length() > 0)
+	if (effect.action_sprite.Length() > 0 and plrEnt.IsPlayer())
 		plr.ShowOverheadSprite(effect.action_sprite, effect.action_sprite_height, effect.action_sprite_time);
 	
 	// firstperson anim
-	if (h_wep and wep !is null and plr.IsAlive())
+	if (h_wep and wep !is null and plrEnt.IsAlive() and plrEnt.IsPlayer())
 	{
 		if (effect.v_model.Length() > 0 or effect.p_model.Length() > 0 or effect.w_model.Length() > 0 or effect.w_model_body >= 0)
 		{
@@ -1209,13 +1210,13 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 		c_wep.TogglePrimaryFire(effect.primary_mode);
 	}
 	
-	if (effect.hud_text.Length() > 0)
+	if (effect.hud_text.Length() > 0 and plrEnt.IsPlayer())
 	{
 		g_PlayerFuncs.PrintKeyBindingString(plr, effect.hud_text);
 	}
 	
 	// thirdperson anim
-	if (effect.anim != -1)
+	if (effect.anim != -1 and plrEnt.IsPlayer())
 	{
 		plr.m_Activity = ACT_RELOAD;
 		plr.pev.sequence = effect.anim;
@@ -1224,7 +1225,7 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 		plr.pev.framerate = effect.anim_speed;
 	}
 
-	if (effect.fade_mode != -1)
+	if (effect.fade_mode != -1 and plrEnt.IsPlayer())
 	{
 		g_PlayerFuncs.ScreenFade(plr, effect.fade_color.getRGB(), effect.fade_time, 
 								 effect.fade_hold, effect.fade_color.a, effect.fade_mode);
@@ -1234,7 +1235,7 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 	//plr.EnableControl(false);
 	//plr.pev.flags ^= 4096;
 	
-	if (effect.player_sprite_count > 0 and effect.player_sprite.Length() > 0)
+	if (effect.player_sprite_count > 0 and effect.player_sprite.Length() > 0 and plrEnt.IsPlayer())
 	{
 		int numIntervals = int(effect.player_sprite_time / effect.player_sprite_freq);
 		

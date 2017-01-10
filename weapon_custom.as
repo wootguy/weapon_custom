@@ -532,11 +532,13 @@ class weapon_custom_shoot : ScriptBaseEntity
 	weapon_custom_user_effect@ user_effect3; // cooldown
 	weapon_custom_user_effect@ user_effect4; // windup
 	weapon_custom_user_effect@ user_effect5; // toggle to
+	weapon_custom_user_effect@ user_effect6; // victim effect (monster attacking player)
 	string user_effect1_str;
 	string user_effect2_str;
 	string user_effect3_str;
 	string user_effect4_str;
 	string user_effect5_str;
+	string user_effect6_str;
 	
 	float rico_angle;
 	Vector muzzle_flash_color;
@@ -727,6 +729,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "user_effect3") 	  user_effect3_str = szValue;
 		else if (szKey == "user_effect4") 	  user_effect4_str = szValue;
 		else if (szKey == "user_effect5") 	  user_effect5_str = szValue;
+		else if (szKey == "user_effect6") 	  user_effect6_str = szValue;
 		
 		else if (szKey == "rico_angle") 	  rico_angle = atof(szValue);		
 		else if (szKey == "muzzle_flash_color") muzzle_flash_color = parseVector(szValue);		
@@ -806,6 +809,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		@user_effect3 = loadUserEffectSettings(user_effect3, user_effect3_str);
 		@user_effect4 = loadUserEffectSettings(user_effect4, user_effect4_str);
 		@user_effect5 = loadUserEffectSettings(user_effect5, user_effect5_str);
+		@user_effect6 = loadUserEffectSettings(user_effect6, user_effect6_str);
 	}
 	
 	int damageType(int defaultType)
