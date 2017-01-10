@@ -493,6 +493,8 @@ class weapon_custom_shoot : ScriptBaseEntity
 	Vector recoil;
 	float kickback;
 	float knockback;
+	Vector kickback_dir;
+	Vector knockback_dir;
 	float max_range;
 	int heal_mode;
 	int heal_targets;
@@ -608,6 +610,8 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "recoil")        recoil = parseVector(szValue);
 		else if (szKey == "kickback")      kickback = atof(szValue);
 		else if (szKey == "knockback")     knockback = atof(szValue);
+		else if (szKey == "kickback_dir")  kickback_dir = parseVector(szValue);
+		else if (szKey == "knockback_dir") knockback_dir = parseVector(szValue);
 		else if (szKey == "max_range")     max_range = atof(szValue);
 		else if (szKey == "heal_mode")     heal_mode = atoi(szValue);
 		else if (szKey == "heal_targets")  heal_targets = atoi(szValue);

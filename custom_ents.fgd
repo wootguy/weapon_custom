@@ -336,7 +336,9 @@
 	]
 	recoil(string) : "Recoil (Min Max)" : "-2 2"
 	kickback(string) : "Kickback (User Push)" : "0"
+	kickback_dir(string) : "Kickback Dir. (RT UP FW)" : "0 0 -1"
 	knockback(string) : "Knockback (Target Push)" : "10"
+	knockback_dir(string) : "Knockback Dir. (RT UP FW)" : "0 0 1"
 	max_range(string) : "Max Range" : "4096"
 	heal_mode(choices) : "Heal Mode" : 0 =
 	[
