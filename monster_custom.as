@@ -6,6 +6,7 @@ void MonsterCustomMapInit()
 {	
 	g_CustomEntityFuncs.RegisterCustomEntity( "monster_custom", "monster_custom" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "monster_custom_event", "monster_custom_event" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "monster_custom_damage", "monster_custom_damage" );
 	g_CustomEntityFuncs.RegisterCustomEntity( "MonsterCustomBase", "monster_custom_generic" );
 }
 
@@ -36,10 +37,15 @@ void MonsterCustomMapActivate()
 	// Hook up event handlers
 	for (uint i = 0; i < all_monster_events.length(); i++)
 		all_monster_events[i].attachToMonster();
+	
+	// Hook up damage handlers
+	for (uint i = 0; i < all_monster_dmgs.length(); i++)
+		all_monster_dmgs[i].attachToMonster();
 }
 
 dictionary custom_monsters;
 array<monster_custom_event@> all_monster_events;
+array<monster_custom_damage@> all_monster_dmgs;
 
 class monster_custom : ScriptBaseEntity
 {
@@ -59,6 +65,7 @@ class monster_custom : ScriptBaseEntity
 	float alert_sound_freq;
 	
 	array<monster_custom_event@> events;
+	array<monster_custom_damage@> damages;
 	
 	bool KeyValue( const string& in szKey, const string& in szValue )
 	{
@@ -217,4 +224,43 @@ class monster_custom_event : ScriptBaseEntity
 		for (uint i = 0; i < sounds.length(); i++)
 			PrecacheSound(sounds[i].file);
 	}
+};
+
+
+class monster_custom_damage : ScriptBaseEntity
+{
+	string monster_classname;
+	int dmgType = 0;
+	Vector knockback;
+	
+	bool KeyValue( const string& in szKey, const string& in szValue )
+	{
+		// Handle custom keyvalues
+		if (szKey == "monster_name")    monster_classname = szValue;
+		else if (szKey == "dmgType")    dmgType = atoi(szValue);
+		else if (szKey == "knockback")  knockback = parseVector(szValue);	
+		else return BaseClass.KeyValue( szKey, szValue );
+		return true;
+	}
+	
+	void Spawn()
+	{
+		all_monster_dmgs.insertLast(@this);
+	}
+	
+	void attachToMonster()
+	{
+		if (monster_classname.Length() > 0)
+		{
+			if (custom_monsters.exists(monster_classname))
+			{
+				monster_custom@ settings = cast<monster_custom>( @custom_monsters[monster_classname] );
+				settings.damages.insertLast(@this);
+			}
+			else
+				println("MONSTER_CUSTOM ERROR: monster_custom_damage references non-existant monster class '" + monster_classname + "'");
+		}
+		else
+			println("MONSTER_CUSTOM ERROR: a monster_custom_damage has no monster class specified");
+	}	
 };

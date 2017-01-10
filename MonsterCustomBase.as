@@ -8,6 +8,7 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 	string displayname;
 	int bloodcolor = 0;
 	array<WeaponSound> sounds;
+	Vector pushVel;  // For some reason, pushing the monster only works during a Think
 	
 	WeaponState state;
 
@@ -102,6 +103,29 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 	
 	int TakeDamage( entvars_t@ pevInflictor, entvars_t@ pevAttacker, float flDamage, int bitsDamageType )
 	{
+		for (uint i = 0; i < settings.damages.length(); i++)
+		{
+			monster_custom_damage@ dmg_handler = settings.damages[i];
+			if (dmg_handler.dmgType == -1 ||  dmg_handler.dmgType & bitsDamageType == dmg_handler.dmgType)
+			{
+				flDamage *= dmg_handler.pev.scale;
+				
+				if (dmg_handler.knockback != Vector(0,0,0))
+				{
+					Vector vecDir = self.pev.origin - (pevAttacker.absmin + pevAttacker.absmax) * 0.5;
+					Vector angles = Math.VecToAngles(vecDir.Normalize());
+					Math.MakeVectors(angles);
+					Vector knockVel = g_Engine.v_forward*dmg_handler.knockback.z +
+									  g_Engine.v_up*dmg_handler.knockback.y +
+									  g_Engine.v_right*dmg_handler.knockback.x;
+					
+					float flForce = self.DamageForce(flDamage);
+					pushVel = knockVel * flForce;
+					pev.nextthink = g_Engine.time; // apply the push now
+				}
+			}
+			
+		}
 		if (self.IsAlive())
 			PainSound();
 			
@@ -111,6 +135,12 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 	void MonsterThink()
 	{
 		AttackThink(state);
+		
+		if (pushVel != Vector(0,0,0))
+		{
+			knockBack(self, pushVel);
+			pushVel = Vector(0,0,0);
+		}
 		
 		if (self.IsAlive())
 		{
