@@ -52,6 +52,11 @@ class monster_custom : ScriptBaseEntity
 	float fov = 180;
 	float turn_speed = 90;
 	Vector min_hull, max_hull;
+	array<WeaponSound> idle_sounds;
+	array<WeaponSound> alert_sounds;
+	array<WeaponSound> pain_sounds;
+	float idle_sound_freq;
+	float alert_sound_freq;
 	
 	array<monster_custom_event@> events;
 	
@@ -68,6 +73,11 @@ class monster_custom : ScriptBaseEntity
 		else if (szKey == "turn_speed") turn_speed = atof(szValue);
 		else if (szKey == "minhullsize") min_hull = parseVector(szValue);
 		else if (szKey == "maxhullsize") max_hull = parseVector(szValue);
+		else if (szKey == "idle_sounds") idle_sounds = parseSounds(szValue);
+		else if (szKey == "alert_sounds") alert_sounds = parseSounds(szValue);
+		else if (szKey == "pain_sounds") pain_sounds = parseSounds(szValue);
+		else if (szKey == "idle_sound_freq") idle_sound_freq = atof(szValue);
+		else if (szKey == "alert_sound_freq") alert_sound_freq = atof(szValue);
 		else return BaseClass.KeyValue( szKey, szValue );
 		return true;
 	}
@@ -82,6 +92,30 @@ class monster_custom : ScriptBaseEntity
 		}
 		else
 			println("monster_custom creation failed. No monster_class specified");
+	}
+	
+	WeaponSound@ getRandomIdleSound()
+	{
+		if (idle_sounds.length() == 0)
+			return null;
+		int randIdx = Math.RandomLong(0, idle_sounds.length()-1);
+		return idle_sounds[randIdx];
+	}
+	
+	WeaponSound@ getRandomAlertSound()
+	{
+		if (alert_sounds.length() == 0)
+			return null;
+		int randIdx = Math.RandomLong(0, alert_sounds.length()-1);
+		return alert_sounds[randIdx];
+	}
+	
+	WeaponSound@ getRandomPainSound()
+	{
+		if (pain_sounds.length() == 0)
+			return null;
+		int randIdx = Math.RandomLong(0, pain_sounds.length()-1);
+		return pain_sounds[randIdx];
 	}
 	
 	void PrecacheModel(string model)
@@ -102,6 +136,12 @@ class monster_custom : ScriptBaseEntity
 	
 	void Precache()
 	{
+		for (uint i = 0; i < idle_sounds.length(); i++)
+			PrecacheSound(idle_sounds[i].file);
+		for (uint i = 0; i < alert_sounds.length(); i++)
+			PrecacheSound(idle_sounds[i].file);
+		for (uint i = 0; i < pain_sounds.length(); i++)
+			PrecacheSound(idle_sounds[i].file);
 		PrecacheModel(default_model);
 	}
 };
