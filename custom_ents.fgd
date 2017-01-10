@@ -1263,3 +1263,41 @@
 	shoot_ent(string) : "Attack" : ""
 	sounds(string) : "Sounds" : ""
 ]
+
+@PointClass size(-8 -8 -8, 8 8 8) color(255 64 0) = monster_custom_damage : "Custom Monster Damage Handler"
+[
+	targetname(target_source) : "Name"
+	monster_name(string) : "Custom Monster Class" : "monster_test"
+	damage_type(choices) : "Damage Type" : 1048576 =
+	[
+		-1 : "All Types"
+		1048576 : "Acid"
+		64 : "Blast"
+		2 : "Bullet"
+		8 : "Burn"
+		128 : "Club"
+		1 : "Crush"
+		16384 : "Drown"
+		524288 : "Drown Recover"
+		1024 : "Energy Beam"
+		32 : "Fall"
+		16 : "Freeze"
+		0 : "Generic"
+		67108864 : "Launch"
+		33554432 : "Medkit Heal"
+		8388608 : "Mortar"
+		65536 : "Nerve Gas"
+		32768 : "Paralyze"
+		131072 : "Poison"
+		262144 : "Radiation"
+		256 : "Shock"
+		134217728 : "Shock Glow"
+		4 : "Slash"
+		2097152 : "Slow Burn"
+		4194304 : "Slow Freeze"
+		16777216 : "Sniper"
+		512 : "Sonic"
+	]
+	scale(integer) : "Percentage of Damage Taken" : 100
+	knockback(string) : "Knockback Vel. (RT UP FW)" : "0 0 0"
+]
