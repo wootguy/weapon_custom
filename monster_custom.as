@@ -112,6 +112,7 @@ class monster_custom_event : ScriptBaseEntity
 	string monster_classname;
 	string shoot_ent_name;
 	weapon_custom_shoot@ shoot_settings = null;
+	array<WeaponSound> sounds;
 	int event = 0;
 	
 	bool KeyValue( const string& in szKey, const string& in szValue )
@@ -120,12 +121,14 @@ class monster_custom_event : ScriptBaseEntity
 		if (szKey == "monster_name") monster_classname = szValue;
 		else if (szKey == "shoot_ent") shoot_ent_name = szValue;
 		else if (szKey == "event_num") event = atoi(szValue);
+		else if (szKey == "sounds")    sounds = parseSounds(szValue);	
 		else return BaseClass.KeyValue( szKey, szValue );
 		return true;
 	}
 	
 	void Spawn()
 	{
+		Precache();
 		all_monster_events.insertLast(@this);
 	}
 	
@@ -143,5 +146,35 @@ class monster_custom_event : ScriptBaseEntity
 		}
 		else
 			println("MONSTER_CUSTOM ERROR: a monster_custom_event has no monster class specified");
+	}
+	
+	WeaponSound@ getRandomSound()
+	{
+		if (sounds.length() == 0)
+			return null;
+		int randIdx = Math.RandomLong(0, sounds.length()-1);
+		return sounds[randIdx];
+	}
+	
+	void PrecacheModel(string model)
+	{
+		if (model.Length() > 0) {
+			debugln("Precaching model for " + monster_classname + ": " + model);
+			g_Game.PrecacheModel( model );
+		}
+	}
+	
+	void PrecacheSound(string sound)
+	{
+		if (sound.Length() > 0) {
+			debugln("Precaching sound for " + monster_classname + " (event " + event + "): " + sound);
+			g_SoundSystem.PrecacheSound( sound );
+		}
+	}
+	
+	void Precache()
+	{
+		for (uint i = 0; i < sounds.length(); i++)
+			PrecacheSound(sounds[i].file);
 	}
 };
