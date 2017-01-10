@@ -335,10 +335,8 @@
 		1 : "Uniform"
 	]
 	recoil(string) : "Recoil (Min Max)" : "-2 2"
-	kickback(string) : "Kickback (User Push)" : "0"
-	kickback_dir(string) : "Kickback Dir. (RT UP FW)" : "0 0 -1"
-	knockback(string) : "Knockback (Target Push)" : "10"
-	knockback_dir(string) : "Knockback Dir. (RT UP FW)" : "0 0 1"
+	kickback(string) : "Kickback Vel. (RT UP FW)" : "0 0 0"
+	knockback(string) : "Knockback Vel. (RT UP FW)" : "0 0 0"
 	max_range(string) : "Max Range" : "4096"
 	heal_mode(choices) : "Heal Mode" : 0 =
 	[
@@ -1200,7 +1198,7 @@
 ]
 
 
-@PointClass size(-8 -8 -24, 8 8 24 ) color(0 255 128) = monster_custom : "Custom monster settings"
+@PointClass size(-8 -8 -24, 8 8 24 ) color(160 0 255) = monster_custom : "Custom monster settings"
 [
 	spawnflags(Flags) =
 	[
@@ -1254,7 +1252,9 @@
 
 @PointClass size(-8 -8 -8, 8 8 8) color(255 255 0) = monster_custom_event : "Custom Monster Model Event Handler"
 [
+	targetname(target_source) : "Name"
 	monster_name(string) : "Custom Monster Class" : "monster_test"
 	event_num(integer) : "Event Number" : 0
 	shoot_ent(string) : "Attack" : ""
+	sounds(string) : "Sounds" : ""
 ]

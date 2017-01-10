@@ -656,10 +656,10 @@ void AttackEffects(WeaponState& state, bool windupAttack=false)
 	else
 		Math.MakeAimVectors( attacker.pev.angles );
 	
-	float kickScale = state.active_opts.kickback*state.windupKickbackMultiplier;
-	Vector kickVel = g_Engine.v_forward*state.active_opts.kickback_dir.z*kickScale + 
-					 g_Engine.v_up*state.active_opts.kickback_dir.y*kickScale + 
-					 g_Engine.v_right*state.active_opts.kickback_dir.x*kickScale;
+	float kickScale = state.windupKickbackMultiplier;
+	Vector kickVel = g_Engine.v_forward*state.active_opts.kickback.z*kickScale + 
+					 g_Engine.v_up*state.active_opts.kickback.y*kickScale + 
+					 g_Engine.v_right*state.active_opts.kickback.x*kickScale;
 	attacker.pev.velocity = attacker.pev.velocity + kickVel;
 	
 	if (state.active_opts.pev.spawnflags & FL_SHOOT_QUAKE_MUZZLEFLASH != 0)
@@ -1990,9 +1990,9 @@ bool AttackMonster(WeaponState& state, Vector vecSrc, TraceResult tr)
 	Vector attackDir = (tr.vecEndPos - vecSrc).Normalize();
 	Vector angles = Math.VecToAngles(attackDir);
 	Math.MakeVectors(angles);
-	Vector knockVel = g_Engine.v_forward*state.active_opts.knockback_dir.z*state.active_opts.knockback +
-					  g_Engine.v_up*state.active_opts.knockback_dir.y*state.active_opts.knockback +
-					  g_Engine.v_right*state.active_opts.knockback_dir.x*state.active_opts.knockback;
+	Vector knockVel = g_Engine.v_forward*state.active_opts.knockback.z +
+					  g_Engine.v_up*state.active_opts.knockback.y +
+					  g_Engine.v_right*state.active_opts.knockback.x;
 		
 	int dmgType = state.active_opts.shoot_type == SHOOT_MELEE ? DMG_CLUB : DMG_BULLET;
 	dmgType = state.active_opts.damageType(dmgType);
@@ -2024,12 +2024,14 @@ bool AttackMonster(WeaponState& state, Vector vecSrc, TraceResult tr)
 			return false;
 
 		g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
-		
 		ent.TraceAttack(attacker.pev, baseDamage, attackDir, tr, dmgType);
+		
+		Vector oldVel = ent.pev.velocity;
 		g_WeaponFuncs.ApplyMultiDamage(ent.pev, attacker.pev);
+		
+		if (dmgType & DMG_LAUNCH == 0) // prevent high damage from launching unless we ask for it
+			ent.pev.velocity = oldVel;
 	}
-	
-	
 	
 	knockBack(ent, knockVel);
 	

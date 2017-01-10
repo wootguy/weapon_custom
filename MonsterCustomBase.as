@@ -7,6 +7,7 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 	string monster_classname;
 	string displayname;
 	int bloodcolor = 0;
+	array<WeaponSound> sounds;
 	
 	WeaponState state;
 
@@ -112,6 +113,10 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 			
 			DoAttack(state);
 		}
+		
+		WeaponSound@ snd = event.getRandomSound();
+		if (snd !is null)
+			snd.play(self, CHAN_ITEM);
 	}
 	
 	// the gun or claw position
