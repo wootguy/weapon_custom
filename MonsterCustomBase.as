@@ -11,6 +11,8 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 	
 	WeaponState state;
 
+	float next_idle_sound;
+	
 	void Spawn()
 	{
 		if (settings is null) 
@@ -98,9 +100,23 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		// TODO: anything
 	}
 	
+	int TakeDamage( entvars_t@ pevInflictor, entvars_t@ pevAttacker, float flDamage, int bitsDamageType )
+	{
+		if (self.IsAlive())
+			PainSound();
+			
+		return BaseClass.TakeDamage( pevInflictor, pevAttacker, flDamage, bitsDamageType );
+	}
+	
 	void MonsterThink()
 	{
 		AttackThink(state);
+		
+		if (self.IsAlive())
+		{
+			IdleSounds();
+		}
+		
 		BaseClass.Think();
 	}
 	
@@ -108,7 +124,6 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 	{
 		if (event.shoot_settings !is null)
 		{
-			println("SHOULD SHOOT "  + event.shoot_settings.pev.targetname);
 			@state.active_opts = @event.shoot_settings;
 			
 			DoAttack(state);
@@ -116,7 +131,10 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		
 		WeaponSound@ snd = event.getRandomSound();
 		if (snd !is null)
+		{
 			snd.play(self, CHAN_ITEM);
+			next_idle_sound = g_Engine.time + settings.idle_sound_freq; // try not to overlap sounds
+		}
 	}
 	
 	// the gun or claw position
@@ -152,6 +170,40 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		if (!handled)
 			println("MONSTER_CUSTOM: Unhandled event " + pEvent.event + " for " + monster_classname);
 			
+	}
+	
+	void IdleSounds()
+	{
+		if (next_idle_sound < g_Engine.time)
+		{
+			if (self.m_MonsterState == MONSTERSTATE_IDLE)
+				IdleSound();
+			else
+				AlertSound();
+		}
+	}
+	
+	void IdleSound()
+	{
+		next_idle_sound = g_Engine.time + settings.idle_sound_freq;
+		WeaponSound@ snd = settings.getRandomIdleSound();
+		if (snd !is null)
+			snd.play(self, CHAN_ITEM);
+	}
+	
+	void AlertSound()
+	{
+		next_idle_sound = g_Engine.time + settings.alert_sound_freq;
+		WeaponSound@ snd = settings.getRandomAlertSound();
+		if (snd !is null)
+			snd.play(self, CHAN_ITEM);
+	}
+	
+	void PainSound()
+	{
+		WeaponSound@ snd = settings.getRandomPainSound();
+		if (snd !is null)
+			snd.play(self, CHAN_ITEM);
 	}
 	
 	Schedule@ GetSchedule( void )
