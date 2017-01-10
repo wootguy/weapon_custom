@@ -1212,7 +1212,6 @@ void DestroyBeams(WeaponState& state)
 		
 			beam.Expand(16.0f, 512.0f); // autokills the sprite when renderamt <= 0
 			beam.pev.deadflag = 1; // indicate that this sprite should be dead soon
-			
 		}
 	}
 }
@@ -1241,7 +1240,8 @@ void CancelBeam(WeaponState& state)
 			state.lastShootSnd.stop(attacker, CHAN_VOICE);
 		state.active_opts.hook_snd.stop(attacker, CHAN_VOICE);
 		state.active_opts.hook_snd2.play(attacker, CHAN_VOICE);
-		state.wep.SendWeaponAnim( state.c_wep.settings.getRandomIdleAnim(), 0, state.c_wep.w_body() );
+		if (attacker.IsPlayer())
+			state.wep.SendWeaponAnim( state.c_wep.settings.getRandomIdleAnim(), 0, state.c_wep.w_body() );
 		//self.SendWeaponAnim( state.active_opts.hook_anim2, 0, 0 );
 		//self.m_flTimeWeaponIdle = g_Engine.time + state.active_opts.hook_delay2; // idle after this	
 		Cooldown(state, state.active_opts);
@@ -1250,7 +1250,7 @@ void CancelBeam(WeaponState& state)
 
 void CreateUserBeam(WeaponState& state, weapon_custom_user_effect@ effect)
 {
-	CBaseEntity@ attacker;
+	CBaseEntity@ attacker = state.user;
 	CBeam@ ubeam = g_EntityFuncs.CreateBeam( effect.beam_spr, 16 );
 	int flags = 0;
 	if (effect.beam_type == BEAM_SPIRAL or effect.beam_type == BEAM_SPIRAL_OPAQUE)
@@ -2022,6 +2022,13 @@ bool AttackMonster(WeaponState& state, Vector vecSrc, TraceResult tr)
 	}
 	
 	knockBack(ent, attackDir * state.active_opts.knockback);
+	
+	if (state.active_opts.user_effect6 !is null)
+	{
+		EHandle h_ent = ent;
+		EHandle h_wep = state.wep;
+		custom_user_effect(h_ent, h_wep, state.active_opts.user_effect6);
+	}
 	
 	return true;
 }

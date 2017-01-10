@@ -35,6 +35,7 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		pev.view_ofs = Vector ( 0, 0, settings.eye_height );
 		self.m_flFieldOfView = -(settings.fov / 180) + 0.9999999f; // less than 1 so 360 deg works as expected
 		pev.yaw_speed = settings.turn_speed;
+		//self.m_afCapability	= bits_CAP_DOORS_GROUP;
 		
 		// settings that squadmakers can override
 		string model = self.pev.model;
@@ -58,6 +59,7 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		
 		// Init AI
 		SetThink( ThinkFunction( MonsterThink ) );
+		SetUse( UseFunction(Use) );
 		self.m_MonsterState = MONSTERSTATE_NONE; 
 		self.MonsterInit(); 
 		
@@ -86,6 +88,15 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		return settings.default_class; 
 	}
 	
+	int ObjectCaps() {
+		return BaseClass.ObjectCaps() | FCAP_IMPULSE_USE;
+	}
+	
+	void Use(CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float value)
+	{
+		// TODO: anything
+	}
+	
 	void MonsterThink()
 	{
 		AttackThink(state);
@@ -111,6 +122,18 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 
 	void HandleAnimEvent( MonsterEvent@ pEvent )
 	{
+		// default
+		switch (pEvent.event)
+		{	// http://mrl.nyu.edu/~dzorin/ig06/lecture22/modeling.pdf
+			case 1002: case 1003: case 1004: case 1005: case 1006: 
+			case 1007: case 1008: case 1009: case 1010: case 2001: 
+			case 2002: case 2010: case 2020: case 5001: case 5002: 
+			case 5004: case 5011: case 5021: case 5031: case 6001:
+				BaseClass.HandleAnimEvent( pEvent );
+				return;				
+		}			
+
+		// custom
 		bool handled = false;
 		for (uint i = 0; i < settings.events.length(); i++)
 		{
@@ -121,12 +144,9 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 				DoEvent(e);
 			}
 		}
-		
 		if (!handled)
-		{
 			println("MONSTER_CUSTOM: Unhandled event " + pEvent.event + " for " + monster_classname);
-			BaseClass.HandleAnimEvent( pEvent );
-		}
+			
 	}
 	
 	Schedule@ GetSchedule( void )
