@@ -237,7 +237,7 @@ class monster_custom_damage : ScriptBaseEntity
 	{
 		// Handle custom keyvalues
 		if (szKey == "monster_name")    monster_classname = szValue;
-		else if (szKey == "dmgType")    dmgType = atoi(szValue);
+		else if (szKey == "damage_type")    dmgType = atoi(szValue);
 		else if (szKey == "knockback")  knockback = parseVector(szValue);	
 		else return BaseClass.KeyValue( szKey, szValue );
 		return true;
