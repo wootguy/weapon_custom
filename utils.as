@@ -1308,7 +1308,7 @@ void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ sho
 void removeWeapon(CBasePlayerWeapon@ wep)
 {
 	//wep.Killed(wep.pev, 0);
-	wep.m_pPlayer.RemovePlayerItem(wep);
+	wep.m_hPlayer.GetEntity().RemovePlayerItem(wep);
 }
 
 void WaterSoundEffects(Vector pos, SoundArgs@ args)

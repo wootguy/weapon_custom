@@ -79,13 +79,20 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	{
 		self.PrecacheCustomModels();
 	}
+	
+	CBasePlayer@ getPlayer()
+	{
+		CBaseEntity@ e_plr = self.m_hPlayer;
+		return cast<CBasePlayer@>(e_plr);
+	}
 
 	void RegenAmmo(int ammoType)
 	{
-		if (self.m_pPlayer is null)
+		CBasePlayer@ plr = getPlayer();
+		if (plr is null)
 			return;
-		int ammoLeft = self.m_pPlayer.m_rgAmmo(ammoType);
-		int maxAmmo = self.m_pPlayer.GetMaxAmmo(ammoType);
+		int ammoLeft = plr.m_rgAmmo(ammoType);
+		int maxAmmo = plr.GetMaxAmmo(ammoType);
 		ammoLeft += settings.primary_regen_amt;
 		
 		if (ammoLeft < 0) 
@@ -93,7 +100,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (ammoLeft > maxAmmo) 
 			ammoLeft = maxAmmo;
 			
-		self.m_pPlayer.m_rgAmmo(ammoType, ammoLeft);
+		plr.m_rgAmmo(ammoType, ammoLeft);
 	}
 	
 	bool GetItemInfo( ItemInfo& out info )
@@ -150,7 +157,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	bool Deploy(bool skipDelay)
 	{
-		@state.user = self.m_pPlayer;
+		CBasePlayer@ plr = getPlayer();
+		@state.user = plr;
 		@state.wep = self;
 		@state.c_wep = this;
 		
@@ -177,9 +185,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			state.deployTime = g_Engine.time;
 		}
 		
-		baseMoveSpeed = self.m_pPlayer.pev.maxspeed;
+		baseMoveSpeed = plr.pev.maxspeed;
 		
-		settings.deploy_snd.play(self.m_pPlayer, CHAN_VOICE);
+		settings.deploy_snd.play(plr, CHAN_VOICE);
 		
 		// set max ammo counts for custom ammo
 		array<string>@ keys = custom_ammos.getKeys();
@@ -189,7 +197,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			bool isCustomAmmo = ammo.ammo_type == -1;
 			
 			if (isCustomAmmo and ammo.custom_ammo_type == settings.primary_ammo_type)
-				self.m_pPlayer.SetMaxAmmo(ammo.custom_ammo_type, ammo.max_ammo);
+				plr.SetMaxAmmo(ammo.custom_ammo_type, ammo.max_ammo);
 		}
 		
 		// delay fixes speed not working on minigum weapon switch and initial spawn
@@ -233,18 +241,19 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void applyPlayerSpeedMult()
 	{
+		CBasePlayer@ plr = getPlayer();
 		float mult = settings.movespeed;
 		if (state.windingUp and !state.windingDown and !state.windupShooting)
 			mult *= state.active_opts.windup_movespeed;
 		if (state.windupShooting)
 			mult *= state.active_opts.windup_shoot_movespeed;
 			
-		self.m_pPlayer.pev.maxspeed = baseMoveSpeed*mult;
-		if (self.m_pPlayer.pev.maxspeed == 0)
-			self.m_pPlayer.pev.maxspeed = 0.000000001; // 0 just resets to default
+		plr.pev.maxspeed = baseMoveSpeed*mult;
+		if (plr.pev.maxspeed == 0)
+			plr.pev.maxspeed = 0.000000001; // 0 just resets to default
 		
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
-			self.m_pPlayer.pev.fuser4 = 1;
+			plr.pev.fuser4 = 1;
 	}
 	
 	CBasePlayerItem@ DropItem()
@@ -264,7 +273,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void Holster(int iSkipLocal = 0) 
 	{
 		// Cleanup beams, windups, etc.
-
+		CBasePlayer@ plr = getPlayer();
+		
 		if (state.hook_ent)
 		{
 			CBaseEntity@ hookEnt = state.hook_ent;
@@ -291,19 +301,19 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		state.windupAmmoUsed = 0;
 		if (state.active_opts !is null)
 		{
-			state.active_opts.windup_snd.stop(self.m_pPlayer, CHAN_VOICE);
-			state.active_opts.wind_down_snd.stop(self.m_pPlayer, CHAN_VOICE);
-			state.active_opts.windup_loop_snd.stop(self.m_pPlayer, CHAN_VOICE);
-			state.active_opts.hook_snd.stop(self.m_pPlayer, CHAN_VOICE);
-			state.active_opts.hook_snd2.stop(self.m_pPlayer, CHAN_VOICE);
+			state.active_opts.windup_snd.stop(plr, CHAN_VOICE);
+			state.active_opts.wind_down_snd.stop(plr, CHAN_VOICE);
+			state.active_opts.windup_loop_snd.stop(plr, CHAN_VOICE);
+			state.active_opts.hook_snd.stop(plr, CHAN_VOICE);
+			state.active_opts.hook_snd2.stop(plr, CHAN_VOICE);
 		}
 		
 		for (uint i = 0; i < state.ubeams.length(); i++)
 			g_EntityFuncs.Remove(state.ubeams[i]);
 		
-		self.m_pPlayer.pev.maxspeed = baseMoveSpeed;
+		plr.pev.maxspeed = baseMoveSpeed;
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
-			self.m_pPlayer.pev.fuser4 = 0;
+			plr.pev.fuser4 = 0;
 	}
 	
 	float WeaponTimeBase()
@@ -319,6 +329,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	// returns true if a windup was started
 	bool DoWindup()
 	{
+		CBasePlayer@ plr = getPlayer();
 		if (state.active_opts.windup_time > 0 and !state.windingUp)
 		{
 			state.windingUp = true;
@@ -341,27 +352,27 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				DepleteAmmo(state, 1); // don't let user get away with free shots
 			}
 			
-			EHandle h_plr = self.m_pPlayer;
+			EHandle h_plr = plr;
 			EHandle h_wep = cast<CBaseEntity@>(self);
 			custom_user_effect(h_plr, h_wep, @state.active_opts.user_effect4);
 			
 			if (settings.player_anims == ANIM_REF_CROWBAR)
 			{
 				// Manually set wrench windup animation
-				self.m_pPlayer.m_Activity = ACT_RELOAD;
-				self.m_pPlayer.pev.frame = 0;
-				self.m_pPlayer.pev.sequence = 25;
-				self.m_pPlayer.ResetSequenceInfo();
-				//self.m_pPlayer.pev.framerate = 0.5f;
+				plr.m_Activity = ACT_RELOAD;
+				plr.pev.frame = 0;
+				plr.pev.sequence = 25;
+				plr.ResetSequenceInfo();
+				//plr.pev.framerate = 0.5f;
 			}
 			if (settings.player_anims == ANIM_REF_GREN)
 			{
 				// Manually set wrench windup animation
-				self.m_pPlayer.m_Activity = ACT_RELOAD;
-				self.m_pPlayer.pev.frame = 0;
-				self.m_pPlayer.pev.sequence = 33;
-				self.m_pPlayer.ResetSequenceInfo();
-				//self.m_pPlayer.pev.framerate = 0.5f;
+				plr.m_Activity = ACT_RELOAD;
+				plr.pev.frame = 0;
+				plr.pev.sequence = 33;
+				plr.ResetSequenceInfo();
+				//plr.pev.framerate = 0.5f;
 			}
 			
 			return true;
@@ -371,9 +382,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void ShowLaser()
 	{
+		CBasePlayer@ plr = getPlayer();
 		if (!state.laser_spr)
 		{
-			CSprite@ dot = g_EntityFuncs.CreateSprite( settings.laser_sprite, self.m_pPlayer.pev.origin, true, 10 );
+			CSprite@ dot = g_EntityFuncs.CreateSprite( settings.laser_sprite, plr.pev.origin, true, 10 );
 			dot.pev.rendermode = kRenderGlow;
 			dot.pev.renderamt = settings.laser_sprite_color.a;
 			dot.pev.rendercolor = settings.laser_sprite_color.getRGB();
@@ -414,7 +426,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		self.SetFOV(0);
 		self.m_fInZoom = false;
 		if (settings.player_anims == ANIM_REF_BOW)
-			self.m_pPlayer.set_m_szAnimExtension("bow");
+			getPlayer().set_m_szAnimExtension("bow");
 	}
 	
 	void TogglePrimaryFire(int mode)
@@ -432,7 +444,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		weapon_custom_shoot@ next_p_opts = primaryAlt ? @p_alt_opts : @p_opts;
 		
-		EHandle h_plr = self.m_pPlayer;
+		EHandle h_plr = getPlayer();
 		EHandle h_wep = cast<CBaseEntity@>(self);
 		custom_user_effect(h_plr, h_wep, @next_p_opts.user_effect5);
 		
@@ -441,6 +453,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void CommonAttack(int attackNum)
 	{
+		CBasePlayer@ plr = getPlayer();
 		int next_fire = attackNum;
 		weapon_custom_shoot@ next_opts = @settings.fire_settings[next_fire];
 		weapon_custom_shoot@ alt_opts = @settings.alt_fire_settings[next_fire];
@@ -464,9 +477,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				self.SetFOV(primaryAlt ? 0 : settings.zoom_fov);
 				self.m_fInZoom = !self.m_fInZoom;
 				if (settings.player_anims == ANIM_REF_BOW)
-					self.m_pPlayer.set_m_szAnimExtension(self.m_fInZoom ? "bowscope" : "bow");
+					plr.set_m_szAnimExtension(self.m_fInZoom ? "bowscope" : "bow");
 				if (settings.player_anims == ANIM_REF_SNIPER)
-					self.m_pPlayer.set_m_szAnimExtension(self.m_fInZoom ? "sniperscope" : "sniper");
+					plr.set_m_szAnimExtension(self.m_fInZoom ? "sniperscope" : "sniper");
 				
 			}
 			
@@ -523,6 +536,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void Reload()
 	{
+		CBasePlayer@ plr = getPlayer();
 		if (settings.clip_size() == 0)
 			return;
 		if (!cooldownFinished(state) or state.reloading > 0)
@@ -542,7 +556,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			state.nextReload = WeaponTimeBase() + settings.reload_start_time;
 			state.nextShootTime = state.nextReload;
 			self.pev.nextthink = g_Engine.time;
-			settings.reload_start_snd.play(self.m_pPlayer, CHAN_VOICE);
+			settings.reload_start_snd.play(plr, CHAN_VOICE);
 			CancelZoom();
 			state.windupHeld = false;
 			return;
@@ -560,7 +574,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		if (settings.reload_mode == RELOAD_EFFECT_CHAIN)
 		{
-			EHandle h_plr = self.m_pPlayer;
+			EHandle h_plr = plr;
 			EHandle h_wep = cast<CBaseEntity@>(self);
 			weapon_custom_user_effect@ ef = emptyReloadEffect ? @settings.user_effect2 : @settings.user_effect1;
 			custom_user_effect(h_plr, h_wep, ef, false);
@@ -569,18 +583,18 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (reloaded)
 		{
 			CancelZoom();
-			settings.reload_snd.play(self.m_pPlayer, CHAN_VOICE);
+			settings.reload_snd.play(plr, CHAN_VOICE);
 			state.unhideLaserTime = WeaponTimeBase() + reload_time;
 		}
 		
 		if (settings.player_anims == ANIM_REF_UZIS)
 		{
 			// Only reload the right uzi since dual wielding doesn't work yet.
-			self.m_pPlayer.m_Activity = ACT_RELOAD;
-			self.m_pPlayer.pev.frame = 0;
-			self.m_pPlayer.pev.sequence = 135;
-			self.m_pPlayer.ResetSequenceInfo();
-			//self.m_pPlayer.pev.framerate = 0.5f;
+			plr.m_Activity = ACT_RELOAD;
+			plr.pev.frame = 0;
+			plr.pev.sequence = 135;
+			plr.ResetSequenceInfo();
+			//plr.pev.framerate = 0.5f;
 		}
 		else
 			BaseClass.Reload();
@@ -597,7 +611,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		{
 			state.nextCooldownEffect = 0;
 			
-			EHandle h_plr = self.m_pPlayer;
+			EHandle h_plr = getPlayer();
 			EHandle h_wep = cast<CBaseEntity@>(self);
 			custom_user_effect(h_plr, h_wep, @state.active_opts.user_effect3, true);
 		}
