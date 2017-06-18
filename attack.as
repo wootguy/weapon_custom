@@ -1678,7 +1678,7 @@ void ShootOneBullet(WeaponState& state)
 	TraceResult tr;
 	Vector vecEnd = vecSrc + vecAiming * state.active_opts.max_range;
 	g_Utility.TraceLine( vecSrc, vecEnd, dont_ignore_monsters, attacker.edict(), tr );
-	te_beampoints(vecSrc, vecEnd);
+	//te_beampoints(vecSrc, vecEnd);
 	
 	if ( tr.flFraction >= 1.0 and state.active_opts.shoot_type == SHOOT_MELEE)
 	{
