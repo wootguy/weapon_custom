@@ -1,0 +1,103 @@
+@PointClass size(-8 -8 -24, 8 8 24 ) color(160 0 255) = monster_custom : "Custom monster settings"
+[
+	spawnflags(Flags) =
+	[
+		1 : "something" : 0
+	]
+	
+	targetname(target_source) : "Name"
+	monster_name(string) : "Monster Class" : "monster_test"
+	default_model(string) : "Default Model" : "models/zombie.mdl"
+	classify(choices) : "Default Classification" : 0 =
+	[
+		0 : "None"
+		1 : "Machine"
+		2 : "Player"
+		3 : "Human Passive"
+		4 : "Human Military"
+		5 : "Alien Military"
+		6 : "Alien Passive"
+		7 : "Alien Monster"
+		8 : "Alien Prey"
+		9 : "Alien Predator"
+		10 : "Insect"
+		11 : "Player Ally"
+		12 : "Player Hornet/Snark"
+		13 : "Alien Hornet/Snark"
+		14 : "X-Race"
+	]
+	bloodcolor(choices) : "Default Blood Color" : 1 =
+	[
+		-1 : "No Blood"
+		1 : "Red"
+		2 : "Yellow"
+	]
+	minhullsize(string) : "Default Min Hull Size (X Y Z)" : "-16 -16 0"
+	maxhullsize(string) : "Default Max Hull Size (X Y Z)" : "16 16 64"
+	display_name(string) : "Default Display Name" : "Custom Monster"
+	health(integer) : "Default Health" : 100
+	eye_height(string) : "Eye Height" : 32
+	fov(string) : "Field of View (degrees)" : 180
+	turn_speed(string) : "Turn Speed" : 90
+	idle_sounds(string) : "Idle Sounds" : ""
+	alert_sounds(string) : "Alert Sounds" : ""
+	pain_sounds(string) : "Pain Sounds" : ""
+	idle_sound_freq(string) : "Idle Sound Frequency (Seconds)" : "10"
+	alert_sound_freq(string) : "Alert Sound Frequency (Seconds)" : "10"
+]
+
+@PointClass base(Monster) size(-24 -24 0, 24 24 32) color(255 0 255) = monster_custom_generic : "Custom Monster Spawn"
+[
+	monster_name(string) : "Custom Monster Class" : "monster_test"
+	spawnflags(Flags) =
+	[
+		32 : "SquadLeader" : 0
+	]
+]
+
+@PointClass size(-8 -8 -8, 8 8 8) color(255 255 0) = monster_custom_event : "Custom Monster Model Event Handler"
+[
+	targetname(target_source) : "Name"
+	monster_name(string) : "Custom Monster Class" : "monster_test"
+	event_num(integer) : "Event Number" : 0
+	shoot_ent(string) : "Attack" : ""
+	sounds(string) : "Sounds" : ""
+]
+
+@PointClass size(-8 -8 -8, 8 8 8) color(255 64 0) = monster_custom_damage : "Custom Monster Damage Handler"
+[
+	targetname(target_source) : "Name"
+	monster_name(string) : "Custom Monster Class" : "monster_test"
+	damage_type(choices) : "Damage Type" : 1048576 =
+	[
+		-1 : "All Types"
+		1048576 : "Acid"
+		64 : "Blast"
+		2 : "Bullet"
+		8 : "Burn"
+		128 : "Club"
+		1 : "Crush"
+		16384 : "Drown"
+		524288 : "Drown Recover"
+		1024 : "Energy Beam"
+		32 : "Fall"
+		16 : "Freeze"
+		0 : "Generic"
+		67108864 : "Launch"
+		33554432 : "Medkit Heal"
+		8388608 : "Mortar"
+		65536 : "Nerve Gas"
+		32768 : "Paralyze"
+		131072 : "Poison"
+		262144 : "Radiation"
+		256 : "Shock"
+		134217728 : "Shock Glow"
+		4 : "Slash"
+		2097152 : "Slow Burn"
+		4194304 : "Slow Freeze"
+		16777216 : "Sniper"
+		512 : "Sonic"
+	]
+	scale(integer) : "Percentage of Damage Taken" : 100
+	knockback(string) : "Knockback Vel. (RT UP FW)" : "0 0 0"
+]
