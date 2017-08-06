@@ -1053,7 +1053,7 @@ class weapon_custom : ScriptBaseEntity
 		// Only custom keyvalues get sent here
 		if (szKey == "weapon_name") weapon_classname = szValue;
 		
-		else if (szKey == "movespeed") movespeed = atof(szValue);
+		else if (szKey == "movespeed") { update_active_weapons(szKey, szValue); movespeed = atof(szValue); }
 		else if (szKey == "default_ammo") default_ammo = atoi(szValue);
 		
 		else if (szKey == "primary_fire") { primary_fire = szValue; relink = true; }
@@ -1123,6 +1123,23 @@ class weapon_custom : ScriptBaseEntity
 			link_shoot_settings();
 			
 		return true;
+	}
+	
+	void update_active_weapons(string changedKey, string newValue)
+	{
+		if (!g_map_activated)
+			return;
+		
+		CBaseEntity@ ent = null;
+		do {
+			@ent = g_EntityFuncs.FindEntityByClassname(ent, weapon_classname); 
+			if (ent !is null)
+			{
+				WeaponCustomBase@ c_wep = cast<WeaponCustomBase@>(CastToScriptClass(ent));
+				if (changedKey == "movespeed")
+					c_wep.applyPlayerSpeedMult();
+			}
+		} while (ent !is null);
 	}
 	
 	void link_shoot_settings()
