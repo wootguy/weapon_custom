@@ -149,6 +149,15 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			NetworkMessage message( MSG_ONE, NetworkMessages::WeapPickup, pPlayer.edict() );
 				message.WriteLong( self.m_iId );
 			message.End();
+			
+			// add to ammo if clip is not used (grenades, snarks, etc.)
+			if (settings.clip_size() == 0)
+			{
+				int ammoType = self.m_iPrimaryAmmoType;
+				int ammoLeft = pPlayer.m_rgAmmo(ammoType);
+				pPlayer.m_rgAmmo(ammoType, ammoLeft + self.m_iDefaultAmmo);
+			}
+			
 			return true;
 		}
 		
