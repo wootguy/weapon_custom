@@ -72,6 +72,7 @@ class WeaponState
 	float nextShootTime = 0;
 	float nextActionTime = 0;
 	float unhideLaserTime = 0;
+	float reloadFinishTime = 0;
 	
 	float nextReload = 0;
 	float nextReloadEnd = 0;
@@ -174,6 +175,19 @@ void AttackThink(WeaponState& state)
 			
 		}
 	}
+	
+	// finish a simple reload
+	if (state.reloading < 0 and state.reloadFinishTime < g_Engine.time and attacker.IsPlayer())
+	{
+		CBasePlayer@ plr = cast<CBasePlayer@>(attacker);
+		int ammoType = state.wep.m_iPrimaryAmmoType;
+		int ammoLeft = plr.m_rgAmmo(ammoType);
+		int clipNeeded = state.c_wep.settings.clip_size() - state.wep.m_iClip;
+		int reloadAmt = Math.min(clipNeeded, ammoLeft);
+		plr.m_rgAmmo(ammoType, ammoLeft-reloadAmt);
+		state.wep.m_iClip += reloadAmt;
+		state.reloading = 0;
+	}	
 	
 	bool monitorBeams = false;
 	for (int i = 0; i < int(state.ubeams.length()); i++)
@@ -1819,7 +1833,7 @@ bool CanStartAttack(WeaponState& state, weapon_custom_shoot@ opts)
 		return false;
 	}
 		
-	if (state.windingUp or state.reloading > 0)
+	if (state.windingUp or state.reloading != 0)
 	{
 		state.windupHeld = true;
 		return false;

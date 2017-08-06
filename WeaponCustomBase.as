@@ -113,8 +113,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		info.iMaxAmmo1 	= 9999999;
 		info.iMaxAmmo2 	= 9999999;
 		
-		info.iMaxClip 	= settings.clip_size();
-		if (info.iMaxClip < 1)
+		info.iMaxClip = 9999999; // just prevents dynamic clip sizes from working
+		if (settings.clip_size() < 1)
 			self.m_iClip = -1;
 		
 		//self.m_iClip2 = 2; // secondary clip not working? :<
@@ -543,12 +543,32 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void SecondaryAttack() { CommonAttack(1); }
 	void TertiaryAttack()  { CommonAttack(2); }
 	
+	// Same as DefaultReload except it doesn't break when changing clip size mid-game
+	bool CustomReload(int reloadAnim, float reloadTime)
+	{
+		CBasePlayer@ plr = getPlayer();
+		
+		int ammoType = self.m_iPrimaryAmmoType;
+		int ammoLeft = plr.m_rgAmmo(ammoType);
+		if (ammoLeft <= 0 or self.m_iClip == settings.clip_size())
+			return false;
+		
+		self.SendWeaponAnim( reloadAnim, 0, w_body() );
+		state.reloadFinishTime = g_Engine.time + reloadTime;
+		state.reloading = -1;
+		self.pev.nextthink = g_Engine.time;
+			
+		return true;
+	}
+	
 	void Reload()
 	{
 		CBasePlayer@ plr = getPlayer();
 		if (settings.clip_size() == 0)
 			return;
-		if (!cooldownFinished(state) or state.reloading > 0)
+		if (!cooldownFinished(state) or state.reloading != 0)
+			return;
+		if (state.reloadFinishTime > g_Engine.time)
 			return;
 			
 		if (state.liveProjectiles > 0 and state.active_opts.projectile.follow_mode == FOLLOW_CROSSHAIRS)
@@ -579,7 +599,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		bool emptyReloadEffect = emptyReload and settings.user_effect2 !is null;
 		float reload_time = settings.getReloadTime(emptyReloadEffect);
 			
-		bool reloaded = self.DefaultReload( settings.clip_size(), reloadAnim, reload_time, w_body() );
+		bool reloaded = CustomReload(reloadAnim, reload_time);
 		
 		if (settings.reload_mode == RELOAD_EFFECT_CHAIN)
 		{
@@ -631,7 +651,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		self.ResetEmptySound();
 		
-		if( self.m_flTimeWeaponIdle > WeaponTimeBase() or state.windingUp or state.reloading > 0 or state.nextActionTime > g_Engine.time)
+		if( self.m_flTimeWeaponIdle > WeaponTimeBase() or state.windingUp or state.reloading != 0 or state.nextActionTime > g_Engine.time)
 			return;
 
 		if (settings.idle_time > 0) {
