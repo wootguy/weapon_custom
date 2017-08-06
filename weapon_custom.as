@@ -23,59 +23,17 @@ void WeaponCustomMapInit()
 	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomProjectile", "custom_projectile" );
 }
 
+bool g_map_activated = false;
+
 void WeaponCustomMapActivate()
-{	
+{
+	g_map_activated = true;
 	// Hook up weapon_custom with weapon_custom_shoot
 	array<string>@ keys = custom_weapons.getKeys();
 	for (uint i = 0; i < keys.length(); i++)
 	{
 		weapon_custom@ wep = cast<weapon_custom@>( custom_weapons[keys[i]] );
-		wep.loadExternalSoundSettings();
-		wep.loadExternalEffectSettings();
-		
-		if (wep.primary_fire.Length() == 0 and wep.secondary_fire.Length() == 0)
-		{
-			println(logPrefix + wep.weapon_classname + " has no primary or secondary fire function set");
-			continue;
-		}
-		
-		bool foundPrimary = false;
-		bool foundAltPrimary = false;
-		bool foundSecondary = false;
-		bool foundTertiary = false;
-		array<string>@ keys2 = custom_weapon_shoots.getKeys();
-		for (uint k = 0; k < keys2.length(); k++)
-		{
-			weapon_custom_shoot@ shoot = cast<weapon_custom_shoot@>( custom_weapon_shoots[keys2[k]] );
-			if (shoot.pev.targetname == wep.primary_fire and wep.primary_fire.Length() > 0) {
-				@wep.fire_settings[0] = shoot;
-				@shoot.weapon = wep;
-				foundPrimary = true;
-			}
-			if (shoot.pev.targetname == wep.secondary_fire and wep.secondary_fire.Length() > 0) {
-				@wep.fire_settings[1] = shoot;
-				@shoot.weapon = wep;
-				foundSecondary = true;
-			}
-			if (shoot.pev.targetname == wep.tertiary_fire and wep.tertiary_fire.Length() > 0) {
-				@wep.fire_settings[2] = shoot;
-				@shoot.weapon = wep;
-				foundTertiary = true;
-			}
-			if (shoot.pev.targetname == wep.primary_alt_fire and wep.primary_alt_fire.Length() > 0) {
-				@wep.alt_fire_settings[0] = shoot;
-				@shoot.weapon = wep;
-				foundAltPrimary = true;
-			}
-		}
-		if (!foundPrimary and wep.primary_fire.Length() > 0)
-			println(logPrefix + " Couldn't find primary fire entity " + wep.primary_fire + " for " + wep.weapon_classname);
-		if (!foundSecondary and wep.secondary_fire.Length() > 0)
-			println(logPrefix + " Couldn't find secondary fire entity '" + wep.secondary_fire + "' for " + wep.weapon_classname);
-		if (!foundTertiary and wep.tertiary_fire.Length() > 0)
-			println(logPrefix + " Couldn't find tertiary fire entity " + wep.tertiary_fire + " for " + wep.weapon_classname);
-		if (!foundAltPrimary and wep.primary_alt_fire.Length() > 0)
-			println(logPrefix + " Couldn't find alternate primary fire entity " + wep.primary_alt_fire + " for " + wep.weapon_classname);
+		wep.link_shoot_settings();
 	}
 	
 	// Hook up ambient_generic with weapon_custom_shoot
@@ -597,7 +555,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	
 	bool KeyValue( const string& in szKey, const string& in szValue )
 	{			
-		if 		(szKey == "sounds")        sounds = parseSounds(szValue);					
+		if 		(szKey == "sounds") sounds = parseSounds(szValue);			
 		else if (szKey == "shoot_fail_snds") shoot_fail_snds = parseSounds(szValue);									
 		else if (szKey == "shoot_anims")   shoot_anims = szValue.Split(";");					
 		else if (szKey == "shoot_empty_snd")  shoot_empty_snd.file = szValue;					
@@ -617,7 +575,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "damage_type2")  damage_type2 = atoi(szValue);
 		else if (szKey == "gib_type")  gib_type = atoi(szValue);
 		
-		else if (szKey == "shell_type")   shell_type = atoi(szValue);
+		else if (szKey == "shell_type")   {shell_type = atoi(szValue); update_shell_type();}
 		else if (szKey == "shell_model")  shell_model = szValue;
 		else if (szKey == "shell_offset") shell_offset = parseVector(szValue);
 		else if (szKey == "shell_vel")    shell_vel = parseVector(szValue);
@@ -721,7 +679,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "beam2_alt_time")   beams[1].alt_time = atof(szValue);
 		
 		else if (szKey == "effect1_name") 	  effect1.name = szValue;
-		else if (szKey == "effect2_name") 	  effect2.name = szValue;	
+		else if (szKey == "effect2_name") 	  effect2.name = szValue;
 		else if (szKey == "effect3_name") 	  effect3.name = szValue;
 		else if (szKey == "effect4_name") 	  effect4.name = szValue;
 		else if (szKey == "user_effect1") 	  user_effect1_str = szValue;
@@ -760,8 +718,26 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "windup_overcharge_anim") windup_overcharge_anim = atoi(szValue);
 		else if (szKey == "windup_movespeed") windup_movespeed = atof(szValue);
 		else if (szKey == "windup_shoot_movespeed") windup_shoot_movespeed = atof(szValue);
-		
+	
 		else return BaseClass.KeyValue( szKey, szValue );
+		
+		if (szKey == "sounds" or szKey == "melee_hit_sounds" or szKey == "melee_flesh_sounds" or
+			szKey == "shoot_fail_snds" or szKey == "windup_snd" or szKey == "wind_down_snd" or
+			szKey == "windup_loop_snd" or szKey == "hook_sound" or szKey == "hook_sound2" or
+			szKey == "projectile_snd" or szKey == "shell_delay_snd" or szKey == "shoot_empty_snd")
+		{
+			if (g_map_activated)
+				loadExternalSoundSettings();
+		}
+		
+		if (szKey == "effect1_name" or szKey == "effect2_name" or szKey == "effect3_name" or
+			szKey == "effect4_name" or szKey == "user_effect1" or szKey == "user_effect2" or
+			szKey == "user_effect3" or szKey == "user_effect4" or szKey == "user_effect5" or
+			szKey == "user_effect6")
+		{
+			if (g_map_activated)
+				loadExternalEffectSettings();
+		}
 		
 		return true;
 	}
@@ -910,6 +886,24 @@ class weapon_custom_shoot : ScriptBaseEntity
 	
 	bool can_fire_underwater() { return pev.spawnflags & FL_SHOOT_IN_WATER != 0; }
 	
+	void update_shell_type()
+	{
+		switch(shell_type)
+		{
+			case SHELL_SMALL:
+				shell_idx = g_Game.PrecacheModel( "models/shell.mdl" );
+				break;
+			case SHELL_LARGE:
+				shell_idx = g_Game.PrecacheModel( "models/saw_shell.mdl" );
+				break;
+			case SHELL_SHOTGUN:
+				shell_idx = g_Game.PrecacheModel( "models/shotgunshell.mdl" );
+				break;
+		}
+		if (shell_model.Length() > 0)
+			shell_idx = g_Game.PrecacheModel( shell_model );
+	}
+	
 	void Precache()
 	{
 		for (uint i = 0; i < sounds.length(); i++)
@@ -953,22 +947,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 			projectile.trail_sprId = PrecacheModel( projectile.trail_spr );
 			
 		if (projectile.entity_class.Length() > 0)
-			g_Game.PrecacheOther( projectile.entity_class );	
-
-		switch(shell_type)
-		{
-			case SHELL_SMALL:
-				shell_idx = g_Game.PrecacheModel( "models/shell.mdl" );
-				break;
-			case SHELL_LARGE:
-				shell_idx = g_Game.PrecacheModel( "models/saw_shell.mdl" );
-				break;
-			case SHELL_SHOTGUN:
-				shell_idx = g_Game.PrecacheModel( "models/shotgunshell.mdl" );
-				break;
-		}
-		if (shell_model.Length() > 0)
-			shell_idx = g_Game.PrecacheModel( shell_model );
+			g_Game.PrecacheOther( projectile.entity_class );
 		
 		/* kingpin ball
 		PrecacheModel( "sprites/nhth1.spr" );
@@ -1070,14 +1049,15 @@ class weapon_custom : ScriptBaseEntity
 	
 	bool KeyValue( const string& in szKey, const string& in szValue )
 	{
+		bool relink = false;
 		// Only custom keyvalues get sent here
 		if (szKey == "weapon_name") weapon_classname = szValue;
 		
 		else if (szKey == "movespeed") movespeed = atof(szValue);
 		else if (szKey == "default_ammo") default_ammo = atoi(szValue);
 		
-		else if (szKey == "primary_fire") primary_fire = szValue;
-		else if (szKey == "primary_alt_fire") primary_alt_fire = szValue;
+		else if (szKey == "primary_fire") { primary_fire = szValue; relink = true; }
+		else if (szKey == "primary_alt_fire") { primary_alt_fire = szValue; relink = true; }
 		else if (szKey == "primary_reload_snd") primary_reload_snd.file = szValue;
 		else if (szKey == "primary_empty_snd") primary_empty_snd.file = szValue;
 		else if (szKey == "primary_ammo") primary_ammo_type = szValue;
@@ -1085,7 +1065,7 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "primary_regen_amt") primary_regen_amt = atoi(szValue);
 		
 		else if (szKey == "secondary_action") secondary_action = atoi(szValue);
-		else if (szKey == "secondary_fire") secondary_fire = szValue;
+		else if (szKey == "secondary_fire") { secondary_fire = szValue; relink = true; }
 		else if (szKey == "secondary_reload_snd") secondary_reload_snd.file = szValue;
 		else if (szKey == "secondary_empty_snd") secondary_empty_snd.file = szValue;
 		else if (szKey == "secondary_ammo") secondary_ammo_type = szValue;
@@ -1093,7 +1073,7 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "secondary_regen_amt") secondary_regen_amt = atoi(szValue);
 		
 		else if (szKey == "tertiary_action") tertiary_action = atoi(szValue);
-		else if (szKey == "tertiary_fire") tertiary_fire = szValue;
+		else if (szKey == "tertiary_fire") { tertiary_fire = szValue; relink = true; }
 		else if (szKey == "tertiary_empty_snd") tertiary_empty_snd.file = szValue;
 		else if (szKey == "tertiary_ammo") tertiary_ammo_type = atoi(szValue);
 		
@@ -1139,7 +1119,60 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "projectile_max_alive") max_live_projectiles = atoi(szValue);
 		else return BaseClass.KeyValue( szKey, szValue );
 			
+		if (relink and g_map_activated)
+			link_shoot_settings();
+			
 		return true;
+	}
+	
+	void link_shoot_settings()
+	{			
+		loadExternalSoundSettings();
+		loadExternalEffectSettings();
+		
+		if (primary_fire.Length() == 0 and secondary_fire.Length() == 0)
+		{
+			println(logPrefix + weapon_classname + " has no primary or secondary fire function set");
+			return;
+		}
+		
+		bool foundPrimary = false;
+		bool foundAltPrimary = false;
+		bool foundSecondary = false;
+		bool foundTertiary = false;
+		array<string>@ keys2 = custom_weapon_shoots.getKeys();
+		for (uint k = 0; k < keys2.length(); k++)
+		{
+			weapon_custom_shoot@ shoot = cast<weapon_custom_shoot@>( custom_weapon_shoots[keys2[k]] );
+			if (shoot.pev.targetname == primary_fire and primary_fire.Length() > 0) {
+				@fire_settings[0] = shoot;
+				@shoot.weapon = this;
+				foundPrimary = true;
+			}
+			if (shoot.pev.targetname == secondary_fire and secondary_fire.Length() > 0) {
+				@fire_settings[1] = shoot;
+				@shoot.weapon = this;
+				foundSecondary = true;
+			}
+			if (shoot.pev.targetname == tertiary_fire and tertiary_fire.Length() > 0) {
+				@fire_settings[2] = shoot;
+				@shoot.weapon = this;
+				foundTertiary = true;
+			}
+			if (shoot.pev.targetname == primary_alt_fire and primary_alt_fire.Length() > 0) {
+				@alt_fire_settings[0] = shoot;
+				@shoot.weapon = this;
+				foundAltPrimary = true;
+			}
+		}
+		if (!foundPrimary and primary_fire.Length() > 0)
+			println(logPrefix + " Couldn't find primary fire entity " + primary_fire + " for " + weapon_classname);
+		if (!foundSecondary and secondary_fire.Length() > 0)
+			println(logPrefix + " Couldn't find secondary fire entity '" + secondary_fire + "' for " + weapon_classname);
+		if (!foundTertiary and tertiary_fire.Length() > 0)
+			println(logPrefix + " Couldn't find tertiary fire entity " + tertiary_fire + " for " + weapon_classname);
+		if (!foundAltPrimary and primary_alt_fire.Length() > 0)
+			println(logPrefix + " Couldn't find alternate primary fire entity " + primary_alt_fire + " for " + weapon_classname);
 	}
 	
 	int clip_size()                      { return self.pev.skin; }
