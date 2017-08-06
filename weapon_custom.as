@@ -1,5 +1,6 @@
 #include "utils"
 #include "WeaponCustomBase"
+#include "monster_custom"
 
 string g_watersplash_spr = "sprites/wep_smoke_01.spr";
 
