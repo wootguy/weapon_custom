@@ -463,7 +463,7 @@ Vector unwindPoint(Vector pos, Vector angles)
 	return pos;
 }
 
-class WeaponCustomProjectile : ScriptBaseEntity
+class WeaponCustomProjectile : ScriptBaseAnimating
 {
 	float thinkDelay = 0.05;
 	weapon_custom_shoot@ shoot_opts;
@@ -499,6 +499,10 @@ class WeaponCustomProjectile : ScriptBaseEntity
 		pev.angles = pev.angles + options.angles;
 		//pev.avelocity = options.avel;
 		//pev.friction = 1.0f - options.elasticity;
+		
+		pev.frame = 0;
+		pev.sequence = 0;
+		self.ResetSequenceInfo();
 		
 		SetThink( ThinkFunction( MoveThink ) );
 		self.pev.nextthink = g_Engine.time + thinkDelay;
