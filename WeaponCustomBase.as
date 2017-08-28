@@ -195,6 +195,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		}
 		
 		baseMoveSpeed = plr.pev.maxspeed;
+		if (baseMoveSpeed == 0)
+		{
+			// 0 = use default speed. So, just set the default speed so the multiplier works.
+			baseMoveSpeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
+		}
 		
 		settings.deploy_snd.play(plr, CHAN_VOICE);
 		
