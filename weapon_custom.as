@@ -1725,7 +1725,7 @@ class weapon_custom_effect : ScriptBaseEntity
 	{
 		EHandle h_ent = self;
 		Math.MakeVectors( pev.angles );
-		custom_effect(pev.origin, @this, self, h_ent, h_ent, g_Engine.v_forward);
+		custom_effect(pev.origin, @this, h_ent, h_ent, h_ent, g_Engine.v_forward);
 	}
 };
 
