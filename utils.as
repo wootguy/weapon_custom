@@ -502,6 +502,7 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 		
 		pev.frame = 0;
 		pev.sequence = 0;
+		pev.air_finished = 0; // set to 1 externally when this needs to die
 		self.ResetSequenceInfo();
 		
 		SetThink( ThinkFunction( MoveThink ) );
@@ -513,6 +514,12 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 	void MoveThink()
 	{
 		float nextThink = g_Engine.time + thinkDelay;
+		
+		if (pev.air_finished > 0)
+		{
+			uninstall_steam_and_kill_yourself();
+			return;
+		}
 		
 		if (attached and target)
 		{
@@ -685,7 +692,7 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 		if (spriteAttachment)
 			g_EntityFuncs.Remove(spriteAttachment);
 	}
-	
+		
 	void DamageTarget(CBaseEntity@ ent)
 	{	
 		if (ent is null or ent.entindex() == 0 or shoot_opts.shoot_type == SHOOT_MELEE)
@@ -1017,6 +1024,7 @@ void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vect
 		return;
 		
 	int smokeScale = int(effect.explode_smoke_spr_scale * 10.0f);
+	int smokeFps = int(effect.explode_smoke_spr_fps);
 	int expScale = int(effect.explode_spr_scale * 10.0f);
 	int expFps = int(effect.explode_spr_fps);
 	string expSprite = effect.explode_spr;
@@ -1071,7 +1079,7 @@ void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vect
 	
 	if (effect.explode_smoke_spr.Length() > 0)
 		g_Scheduler.SetTimeout("delayed_smoke", effect.explode_smoke_delay, pos, 
-								effect.explode_smoke_spr, smokeScale);
+								effect.explode_smoke_spr, smokeScale, smokeFps);
 }
 
 void animate_view_angles(EHandle h_plr, Vector start_angle, Vector add_angle, float startTime, float endTime)
@@ -1280,9 +1288,9 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 	}
 }
 
-void delayed_smoke(Vector origin, string sprite, int scale)
+void delayed_smoke(Vector origin, string sprite, int scale, int fps)
 {
-	te_smoke(origin, sprite, scale);
+	te_smoke(origin, sprite, scale, fps);
 }
 
 void delayed_bubbles(Vector mins, Vector maxs, float height, string spr, int count, float speed)
@@ -1300,7 +1308,8 @@ void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ sho
 		EHandle howner = owner;
 		EHandle target;
 		custom_effect(ent.pev.origin, shoot_opts.effect3, ent, target, howner, Vector(0,0,0));
-		g_EntityFuncs.Remove(ent);
+		ent.pev.air_finished = 1; // kill signal
+		//g_EntityFuncs.Remove(ent);
 	}
 	if (sprite)
 	{
