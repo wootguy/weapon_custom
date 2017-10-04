@@ -47,6 +47,7 @@ class WeaponState
 	float windupStart = 0;
 	float lastWindupInc = 0;
 	int windupAmmoUsed = 0;
+	float lastWindupHeld = 0; // Don't winddown immediately or else laggy players won't be able to hold a windup
 	
 	float windupMultiplier = 1.0f;
 	float windupKickbackMultiplier = 1.0f;
@@ -241,7 +242,7 @@ void AttackThink(WeaponState& state)
 		{
 			CancelBeam(state);			
 		}
-		state.windupHeld = false;
+		cancelWindupTimeout(state);
 	}
 	else if (state.burstFiring)
 	{
@@ -291,7 +292,7 @@ void AttackThink(WeaponState& state)
 				g_EntityFuncs.Remove( state.hook_beam );
 			state.hook_beam = null;
 		}
-		state.windupHeld = false;
+		cancelWindupTimeout(state);
 	}
 	else if (!state.canShootAgain)
 	{
@@ -625,8 +626,16 @@ void WindupThink(WeaponState& state)
 		}
 		
 		state.c_wep.applyPlayerSpeedMult();
-		state.windupHeld = false;
+		cancelWindupTimeout(state);
 	}
+}
+
+void cancelWindupTimeout(WeaponState& state)
+{
+	// only cancel if we haven't gotten an update from the player in a while (low fps and/or dropped packets)
+	// 100ms delay handles 20fps with 20% dropped packets, but makes windups less responsive
+	if (state.lastWindupHeld + 0.1f < g_Engine.time)
+		state.windupHeld = false;
 }
 
 // Returns true when finished
@@ -1643,6 +1652,7 @@ void ShootHook(WeaponState& state)
 	{
 		state.shootingHook = true;
 		state.windupHeld = true;
+		state.lastWindupHeld = g_Engine.time;
 		state.hookAnimStarted = false;
 		state.hookAnimStartTime = g_Engine.time + state.active_opts.hook_delay;
 		
@@ -1836,12 +1846,14 @@ bool CanStartAttack(WeaponState& state, weapon_custom_shoot@ opts)
 	if (state.windingUp or state.reloading != 0)
 	{
 		state.windupHeld = true;
+		state.lastWindupHeld = g_Engine.time;
 		return false;
 	}
 
 	if (state.shootingHook or state.beam_active)
 	{
 		state.windupHeld = true;
+		state.lastWindupHeld = g_Engine.time;
 		if (@opts != @state.active_opts)
 			return false;
 	}

@@ -154,13 +154,14 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			if (settings.clip_size() == 0)
 			{
 				int ammoType = self.m_iPrimaryAmmoType;
-				int ammoLeft = pPlayer.m_rgAmmo(ammoType);
-				pPlayer.m_rgAmmo(ammoType, ammoLeft + self.m_iDefaultAmmo);
+				if (ammoType != -1)
+				{
+					int ammoLeft = pPlayer.m_rgAmmo(ammoType);
+					pPlayer.m_rgAmmo(ammoType, ammoLeft + self.m_iDefaultAmmo);
+				}
 			}
-			
 			return true;
 		}
-		
 		return false;
 	}
 	
@@ -351,6 +352,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			state.windingDown = false;
 			state.windupFinished = false;
 			state.windupHeld = true;
+			state.lastWindupHeld = g_Engine.time;
 			state.windupSoundActive = false;
 			state.windupOvercharged = false;
 			state.windupMultiplier = 1.0f;
