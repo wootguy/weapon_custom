@@ -647,7 +647,7 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			nextTrailEffectTime = g_Engine.time + options.trail_effect_freq;
 			CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
 			EHandle howner = owner;
-			custom_effect(self.pev.origin, shoot_opts.effect4, self, howner, howner, pev.velocity.Normalize());
+			custom_effect(self.pev.origin, shoot_opts.effect4, EHandle(self), howner, howner, pev.velocity.Normalize());
 		}
 		
 		if (weaponPickup)
@@ -817,7 +817,7 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
 			EHandle howner = owner;
 			EHandle htarget = pOther;
-			custom_effect(self.pev.origin, effect, self, htarget, howner, Vector(0,0,0));
+			custom_effect(self.pev.origin, effect, EHandle(self), htarget, howner, Vector(0,0,0));
 		}
 		
 		ConvertToWeapon();
@@ -860,7 +860,7 @@ int getRandomPitch(int variance)
 	return Math.RandomLong(100-variance, 100+variance);
 }
 
-void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creator, EHandle target,
+void custom_effect(Vector pos, weapon_custom_effect@ effect, EHandle creator, EHandle target,
 					EHandle owner, Vector vDir, DecalTarget@ dt=null, bool delayFinished=false)
 {
 	if (!effect.valid)
@@ -868,19 +868,19 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, CBaseEntity@ creato
 		
 	if (dt is null)
 	{
-		@dt = @getProjectileDecalTarget(creator, creator is null ? pos : Vector(0,0,0), 32);
+		@dt = @getProjectileDecalTarget(creator.IsValid() ? creator.GetEntity() : null, !creator.IsValid() ? pos : Vector(0,0,0), 32);
 	}
 		
 	if (effect.delay > 0 and !delayFinished)
 	{
-		g_Scheduler.SetTimeout("custom_effect", effect.delay, pos, @effect, @creator, target, owner, vDir, @dt, true);
+		g_Scheduler.SetTimeout("custom_effect", effect.delay, pos, @effect, creator, target, owner, vDir, @dt, true);
 		return;
 	}
 	
 	// velocity for explosion-type effects
-	Vector vel = delayFinished or creator is null ? Vector(0,0,0) : creator.pev.velocity;
+	Vector vel = delayFinished or !creator.IsValid() ? Vector(0,0,0) : creator.GetEntity().pev.velocity;
 	bool inWater = g_EngineFuncs.PointContents(pos) == CONTENTS_WATER;
-	Vector dir = creator is null ? dt.tr.vecPlaneNormal : creator.pev.velocity.Normalize();	
+	Vector dir = !creator.IsValid() ? dt.tr.vecPlaneNormal : creator.GetEntity().pev.velocity.Normalize();	
 		
 	if (effect.pev.spawnflags & FL_EFFECT_EXPLOSION != 0)
 	{
@@ -1307,7 +1307,7 @@ void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ sho
 		CBaseEntity@ owner = g_EntityFuncs.Instance( ent.pev.owner );
 		EHandle howner = owner;
 		EHandle target;
-		custom_effect(ent.pev.origin, shoot_opts.effect3, ent, target, howner, Vector(0,0,0));
+		custom_effect(ent.pev.origin, shoot_opts.effect3, EHandle(ent), target, howner, Vector(0,0,0));
 		ent.pev.air_finished = 1; // kill signal
 		//g_EntityFuncs.Remove(ent);
 	}

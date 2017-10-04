@@ -1058,7 +1058,7 @@ void UpdateBeams(WeaponState& state)
 					weapon_custom_effect@ ef;
 					@ef = i == int(beamShots.length()-1) ? @state.active_opts.effect1 : @state.active_opts.effect2;
 					Vector dir = (shot.tr.vecEndPos - shot.startPos).Normalize();
-					custom_effect(shot.tr.vecEndPos, ef, null, h_ent, h_plr, dir, dt);
+					custom_effect(shot.tr.vecEndPos, ef, EHandle(), h_ent, h_plr, dir, dt);
 				}
 			}
 			
@@ -1796,7 +1796,7 @@ void ShootOneBullet(WeaponState& state)
 				EHandle h_plr = attacker;
 				EHandle h_ent = pHit;
 				weapon_custom_effect@ ef = pHit.IsBSPModel() ? @state.active_opts.effect1 : @state.active_opts.effect2;
-				custom_effect(tr.vecEndPos, ef, null, h_ent, h_plr, vecAiming);
+				custom_effect(tr.vecEndPos, ef, EHandle(), h_ent, h_plr, vecAiming);
 			}
 		}
 	}
