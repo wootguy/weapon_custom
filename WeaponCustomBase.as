@@ -608,16 +608,16 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			
 		bool reloaded = CustomReload(reloadAnim, reload_time);
 		
-		if (settings.reload_mode == RELOAD_EFFECT_CHAIN)
-		{
-			EHandle h_plr = plr;
-			EHandle h_wep = cast<CBaseEntity@>(self);
-			weapon_custom_user_effect@ ef = emptyReloadEffect ? @settings.user_effect2 : @settings.user_effect1;
-			custom_user_effect(h_plr, h_wep, ef, false);
-		}
-		
 		if (reloaded)
 		{
+			if (settings.reload_mode == RELOAD_EFFECT_CHAIN)
+			{
+				EHandle h_plr = plr;
+				EHandle h_wep = cast<CBaseEntity@>(self);
+				weapon_custom_user_effect@ ef = emptyReloadEffect ? @settings.user_effect2 : @settings.user_effect1;
+				custom_user_effect(h_plr, h_wep, ef, false);
+			}
+		
 			CancelZoom();
 			settings.reload_snd.play(plr, CHAN_VOICE);
 			state.unhideLaserTime = WeaponTimeBase() + reload_time;
