@@ -731,8 +731,11 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			}
 		}
 		
+		Vector oldVel = ent.pev.velocity;
+		int dmgType = shoot_opts.damageType(DMG_CLUB);
+		
 		g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
-		ent.TraceAttack(owner.pev, baseDamage, vecAiming, tr, shoot_opts.damageType(DMG_CLUB));
+		ent.TraceAttack(owner.pev, baseDamage, vecAiming, tr, dmgType);
 		
 		if (friendlyFire)
 		{
@@ -747,7 +750,9 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 		}
 		else
 			g_WeaponFuncs.ApplyMultiDamage(ent.pev, owner.pev);
-		
+			
+		if (dmgType & DMG_LAUNCH == 0) // prevent high damage from launching unless we ask for it
+			ent.pev.velocity = oldVel;
 		
 		WeaponSound@ impact_snd;
 		if ((ent.IsMonster() or ent.IsPlayer()) and !ent.IsMachine())
