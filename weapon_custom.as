@@ -460,6 +460,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int damage_type;
 	int damage_type2;
 	int gib_type;
+	bool friendly_fire;
 	
 	int bullets;
 	int bullet_type; // see docs for "Bullet"
@@ -575,6 +576,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "damage_type")  damage_type = atoi(szValue);
 		else if (szKey == "damage_type2")  damage_type2 = atoi(szValue);
 		else if (szKey == "gib_type")  gib_type = atoi(szValue);
+		else if (szKey == "friendly_fire")  friendly_fire = atoi(szValue) == 1;
 		
 		else if (szKey == "shell_type")   {shell_type = atoi(szValue); update_shell_type();}
 		else if (szKey == "shell_model")  shell_model = szValue;
@@ -1725,7 +1727,7 @@ class weapon_custom_effect : ScriptBaseEntity
 	{
 		EHandle h_ent = self;
 		Math.MakeVectors( pev.angles );
-		custom_effect(pev.origin, @this, h_ent, h_ent, h_ent, g_Engine.v_forward);
+		custom_effect(pev.origin, @this, h_ent, h_ent, h_ent, g_Engine.v_forward, 0);
 	}
 };
 
