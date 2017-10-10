@@ -321,6 +321,11 @@
 		4096 : "Never Gib"
 		8192 : "Always Gib"
 	]
+	friendly_fire(choices) : "Friendly Fire" : 0 =
+	[
+		0 : "No"
+		1 : "Yes"
+	]
 	sounds(string) : "Shoot Sounds" : ""
 	shoot_anims(string) : "Shoot Animations" : ""
 	shoot_empty_anim(string) : "Shoot Empty Animation" : "-1"

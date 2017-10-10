@@ -647,7 +647,7 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			nextTrailEffectTime = g_Engine.time + options.trail_effect_freq;
 			CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
 			EHandle howner = owner;
-			custom_effect(self.pev.origin, shoot_opts.effect4, EHandle(self), howner, howner, pev.velocity.Normalize());
+			custom_effect(self.pev.origin, shoot_opts.effect4, EHandle(self), howner, howner, pev.velocity.Normalize(), shoot_opts.friendly_fire ? 1 : 0);
 		}
 		
 		if (weaponPickup)
@@ -693,7 +693,7 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			g_EntityFuncs.Remove(spriteAttachment);
 	}
 		
-	void DamageTarget(CBaseEntity@ ent)
+	void DamageTarget(CBaseEntity@ ent, bool friendlyFire)
 	{	
 		if (ent is null or ent.entindex() == 0 or shoot_opts.shoot_type == SHOOT_MELEE)
 			return;
@@ -733,7 +733,21 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 		
 		g_WeaponFuncs.ClearMultiDamage(); // fixes TraceAttack() crash for some reason
 		ent.TraceAttack(owner.pev, baseDamage, vecAiming, tr, shoot_opts.damageType(DMG_CLUB));
-		g_WeaponFuncs.ApplyMultiDamage(ent.pev, owner.pev);
+		
+		if (friendlyFire)
+		{
+			// set both classes in case this a pvp map where classes are always changing
+			int oldClass1 = owner.GetClassification(0);
+			int oldClass2 = ent.GetClassification(0);
+			owner.SetClassification(CLASS_PLAYER);
+			ent.SetClassification(CLASS_ALIEN_MILITARY);
+			g_WeaponFuncs.ApplyMultiDamage(ent.pev, owner.pev);
+			owner.SetClassification(oldClass1);
+			ent.SetClassification(oldClass2);
+		}
+		else
+			g_WeaponFuncs.ApplyMultiDamage(ent.pev, owner.pev);
+		
 		
 		WeaponSound@ impact_snd;
 		if ((ent.IsMonster() or ent.IsPlayer()) and !ent.IsMachine())
@@ -807,7 +821,7 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			return; 
 		}
 		
-		DamageTarget(pOther);
+		DamageTarget(pOther, shoot_opts.friendly_fire);
 		knockBack(pOther, pev.velocity.Normalize() * shoot_opts.knockback);
 		
 		// don't spam bounce sounds when rolling on ground
@@ -817,7 +831,7 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			CBaseEntity@ owner = g_EntityFuncs.Instance( self.pev.owner );
 			EHandle howner = owner;
 			EHandle htarget = pOther;
-			custom_effect(self.pev.origin, effect, EHandle(self), htarget, howner, Vector(0,0,0));
+			custom_effect(self.pev.origin, effect, EHandle(self), htarget, howner, Vector(0,0,0), shoot_opts.friendly_fire ? 1 : 0);
 		}
 		
 		ConvertToWeapon();
@@ -860,8 +874,12 @@ int getRandomPitch(int variance)
 	return Math.RandomLong(100-variance, 100+variance);
 }
 
+// custom effect flags
+int FL_EFFECT_FRIENDLY_FIRE = 1;
+int FL_EFFECT_DELAY_FINISHED = 2;
+
 void custom_effect(Vector pos, weapon_custom_effect@ effect, EHandle creator, EHandle target,
-					EHandle owner, Vector vDir, DecalTarget@ dt=null, bool delayFinished=false)
+					EHandle owner, Vector vDir, int flags, DecalTarget@ dt=null)
 {
 	if (!effect.valid)
 		return;
@@ -870,10 +888,12 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, EHandle creator, EH
 	{
 		@dt = @getProjectileDecalTarget(creator.IsValid() ? creator.GetEntity() : null, !creator.IsValid() ? pos : Vector(0,0,0), 32);
 	}
-		
+	
+	bool delayFinished = (flags & FL_EFFECT_DELAY_FINISHED) != 0;
+	bool friendlyFire = (flags & FL_EFFECT_FRIENDLY_FIRE) != 0;
 	if (effect.delay > 0 and !delayFinished)
 	{
-		g_Scheduler.SetTimeout("custom_effect", effect.delay, pos, @effect, creator, target, owner, vDir, @dt, true);
+		g_Scheduler.SetTimeout("custom_effect", effect.delay, pos, @effect, creator, target, owner, vDir, flags | FL_EFFECT_DELAY_FINISHED, @dt);
 		return;
 	}
 	
@@ -887,7 +907,7 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, EHandle creator, EH
 		Vector exp_pos = pos;
 		if (dt.ent !is null)
 			exp_pos = exp_pos + dt.tr.vecPlaneNormal*effect.explode_offset;
-		custom_explosion(exp_pos, vel, effect, dt.pos, dt.ent, owner, inWater);
+		custom_explosion(exp_pos, vel, effect, dt.pos, dt.ent, owner, inWater, friendlyFire);
 	}
 	if (effect.pev.spawnflags & FL_EFFECT_LIGHTS != 0)
 	{
@@ -1014,11 +1034,11 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, EHandle creator, EH
 		rico_snd.play(pos, CHAN_STATIC);
 	
 	if (effect.next_effect !is null)
-		custom_effect(pos, effect.next_effect, creator, target, owner, vDir, dt, false);
+		custom_effect(pos, effect.next_effect, creator, target, owner, vDir, flags & ~FL_EFFECT_DELAY_FINISHED, dt);
 }
 
 void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vector decalPos, 
-					  CBaseEntity@ decalEnt, EHandle owner, bool inWater)
+					  CBaseEntity@ decalEnt, EHandle owner, bool inWater, bool friendlyFire)
 {
 	if (!effect.valid)
 		return;
@@ -1074,7 +1094,32 @@ void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vect
 		CBaseEntity@ ownerEnt = owner;
 		float radius = effect.explode_radius;
 		float dmg = effect.explode_damage;
-		g_WeaponFuncs.RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
+		
+		if (friendlyFire)
+		{
+			// set class of all players to opposite of attacker, just until after we call RadiusDamage
+			array<CBaseEntity@> victims;
+			array<int> oldClassify;
+			CBaseEntity@ victim = null;
+			do {
+				@victim = g_EntityFuncs.FindEntityByClassname(victim, "player");
+				if (victim !is null)
+				{
+					victims.insertLast(victim);
+					oldClassify.insertLast(victim.GetClassification(0));
+					victim.SetClassification(CLASS_ALIEN_MILITARY);
+				}
+			} while (victim !is null);
+			
+			ownerEnt.SetClassification(CLASS_PLAYER);
+			
+			g_WeaponFuncs.RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
+			
+			for (uint i = 0; i < victims.length(); i++)
+				victims[i].SetClassification(oldClassify[i]);
+		}
+		else
+			g_WeaponFuncs.RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
 	}
 	
 	if (effect.explode_smoke_spr.Length() > 0)
@@ -1307,7 +1352,7 @@ void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ sho
 		CBaseEntity@ owner = g_EntityFuncs.Instance( ent.pev.owner );
 		EHandle howner = owner;
 		EHandle target;
-		custom_effect(ent.pev.origin, shoot_opts.effect3, EHandle(ent), target, howner, Vector(0,0,0));
+		custom_effect(ent.pev.origin, shoot_opts.effect3, EHandle(ent), target, howner, Vector(0,0,0), shoot_opts.friendly_fire ? 1 : 0);
 		ent.pev.air_finished = 1; // kill signal
 		//g_EntityFuncs.Remove(ent);
 	}

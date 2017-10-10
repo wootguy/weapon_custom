@@ -1058,7 +1058,7 @@ void UpdateBeams(WeaponState& state)
 					weapon_custom_effect@ ef;
 					@ef = i == int(beamShots.length()-1) ? @state.active_opts.effect1 : @state.active_opts.effect2;
 					Vector dir = (shot.tr.vecEndPos - shot.startPos).Normalize();
-					custom_effect(shot.tr.vecEndPos, ef, EHandle(), h_ent, h_plr, dir, dt);
+					custom_effect(shot.tr.vecEndPos, ef, EHandle(), h_ent, h_plr, dir, state.active_opts.friendly_fire ? 1 : 0, dt);
 				}
 			}
 			
@@ -1796,7 +1796,7 @@ void ShootOneBullet(WeaponState& state)
 				EHandle h_plr = attacker;
 				EHandle h_ent = pHit;
 				weapon_custom_effect@ ef = pHit.IsBSPModel() ? @state.active_opts.effect1 : @state.active_opts.effect2;
-				custom_effect(tr.vecEndPos, ef, EHandle(), h_ent, h_plr, vecAiming);
+				custom_effect(tr.vecEndPos, ef, EHandle(), h_ent, h_plr, vecAiming, state.active_opts.friendly_fire ? 1 : 0);
 			}
 		}
 	}
@@ -2053,7 +2053,24 @@ bool AttackMonster(WeaponState& state, Vector vecSrc, TraceResult tr)
 		ent.TraceAttack(attacker.pev, baseDamage, attackDir, tr, dmgType);
 		
 		Vector oldVel = ent.pev.velocity;
-		g_WeaponFuncs.ApplyMultiDamage(ent.pev, attacker.pev);
+		
+		if (state.active_opts.friendly_fire)
+		{
+			// set both classes in case this a pvp map where classes are always changing
+			int oldClass1 = attacker.GetClassification(0);
+			int oldClass2 = ent.GetClassification(0);
+			attacker.SetClassification(CLASS_PLAYER);
+			ent.SetClassification(CLASS_ALIEN_MILITARY);
+			
+			g_WeaponFuncs.ApplyMultiDamage(ent.pev, attacker.pev);
+			
+			attacker.SetClassification(oldClass1);
+			ent.SetClassification(oldClass2);
+		}
+		else
+			g_WeaponFuncs.ApplyMultiDamage(ent.pev, attacker.pev);
+		
+		
 		
 		if (dmgType & DMG_LAUNCH == 0) // prevent high damage from launching unless we ask for it
 			ent.pev.velocity = oldVel;
