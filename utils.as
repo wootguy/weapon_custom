@@ -525,17 +525,6 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 		{
 			CBaseEntity@ tar = target;
 			
-			if (!tar.IsBSPModel() and !tar.IsAlive())
-			{
-				attached = false;
-				target = null;
-				if (shoot_opts.hook_type != HOOK_DISABLED)
-				{
-					uninstall_steam_and_kill_yourself();
-					return;
-				}
-			}
-			
 			// rotate position around target
 			Vector newOri = attachStartOri + (tar.pev.origin - targetStartOri);
 			newOri = rotatePoint(newOri - tar.pev.origin, -tar.pev.angles) + tar.pev.origin;
@@ -605,6 +594,18 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 				}
 				
 				nextThink = g_Engine.time; // don't let gravity overpower the pull force too easily
+			}
+			
+			if (!tar.IsBSPModel() and !tar.IsAlive())
+			{
+				attached = false;
+				target = null;
+				if (shoot_opts.hook_type != HOOK_DISABLED)
+				{
+					uninstall_steam_and_kill_yourself();
+					return;
+				}
+				pev.movetype = options.gravity != 0 ? MOVETYPE_BOUNCE : MOVETYPE_BOUNCEMISSILE;
 			}
 		}
 		else
