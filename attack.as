@@ -2063,13 +2063,13 @@ bool AttackMonster(WeaponState& state, Vector vecSrc, TraceResult tr)
 			attacker.SetClassification(CLASS_PLAYER);
 			ent.SetClassification(CLASS_ALIEN_MILITARY);
 			
-			g_WeaponFuncs.ApplyMultiDamage(ent.pev, attacker.pev);
+			g_WeaponFuncs.ApplyMultiDamage(attacker.pev, ent.pev);
 			
 			attacker.SetClassification(oldClass1);
 			ent.SetClassification(oldClass2);
 		}
 		else
-			g_WeaponFuncs.ApplyMultiDamage(ent.pev, attacker.pev);
+			g_WeaponFuncs.ApplyMultiDamage(attacker.pev, ent.pev);
 		
 		
 		
