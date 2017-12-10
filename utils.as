@@ -610,6 +610,16 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 		}
 		else
 		{
+			if (attached)
+			{
+				attached = false;
+				if (shoot_opts.hook_type != HOOK_DISABLED)
+				{
+					uninstall_steam_and_kill_yourself();
+					return;
+				}
+				pev.movetype = options.gravity != 0 ? MOVETYPE_BOUNCE : MOVETYPE_BOUNCEMISSILE;
+			}
 			if (shoot_opts.pev.spawnflags & FL_SHOOT_PROJ_NO_ORIENT == 0)
 				g_EngineFuncs.VecToAngles(self.pev.velocity, self.pev.angles);
 		}

@@ -63,6 +63,7 @@ int REC_BULLETS_PER_SECOND = 32; // max recommended bullets per second (shotgun 
 bool debug_mode = false;
 
 // weapon spawn flags
+int FL_WEP_EXHAUSTIBLE = 16;
 int FL_WEP_HIDE_SECONDARY_AMMO = 32;
 int FL_WEP_LASER_SIGHT = 64;
 int FL_WEP_NO_JUMP = 128;
