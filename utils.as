@@ -1145,6 +1145,14 @@ void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vect
 								effect.explode_smoke_spr, smokeScale, smokeFps);
 }
 
+// a basic set of directions for a sphere (up/down/left/right/front/back with 1 in-between step)
+// This isn't good enough for large explosions, but hopefully FindEntityInSphere will work at that point.
+array<Vector> sphereDirs = {Vector(1,0,0).Normalize(), Vector(0,1,0).Normalize(), Vector(0,0,1).Normalize(),
+							  Vector(-1,0,0).Normalize(), Vector(0,-1,0).Normalize(), Vector(0,0,-1).Normalize(),
+							  Vector(1,1,0).Normalize(), Vector(-1,1,0).Normalize(), Vector(1,-1,0).Normalize(), Vector(-1,-1,0).Normalize(),
+							  Vector(1,0,1).Normalize(), Vector(-1,0,1).Normalize(), Vector(1,0,-1).Normalize(), Vector(-1,0,-1).Normalize(),
+							  Vector(0,1,1).Normalize(), Vector(0,-1,1).Normalize(), Vector(0,1,-1).Normalize(), Vector(0,-1,-1).Normalize()};
+
 void RadiusDamage( Vector vecSrc, entvars_t@ pevInflictor, entvars_t@ pevAttacker, float flDamage, float flRadius, int iClassIgnore, int bitsDamageType )
 {
 	CBaseEntity@ pEntity = null;
@@ -1163,11 +1171,12 @@ void RadiusDamage( Vector vecSrc, entvars_t@ pevInflictor, entvars_t@ pevAttacke
 
 	if ( pevAttacker is null )
 		@pevAttacker = @pevInflictor;
-		
+	
+	dictionary attacked;
 	// iterate on all entities in the vicinity.
 	while ((@pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, vecSrc, flRadius, "*", "classname" )) != null)
 	{
-		println("CHeck " + pEntity.pev.classname);
+		attacked[pEntity.entindex()] = true;
 		if ( pEntity.pev.takedamage != DAMAGE_NO )
 		{
 			// UNDONE: this should check a damage mask, not an ignore
@@ -1217,6 +1226,49 @@ void RadiusDamage( Vector vecSrc, entvars_t@ pevInflictor, entvars_t@ pevAttacke
 			}
 		}
 	}
+
+	// Now cast a few rays to make sure we hit the obvious targets. This is needed 
+	// for things like tall func_breakables. For example, if the origin is at the 
+	// bottom but the explosion origin is at the top. FindEntityInSphere won't  
+	// detect it even if the explosion is touching the surface of the brush.
+	for (uint i = 0; i < sphereDirs.size(); i++)
+	{
+		//te_beampoints(vecSrc, vecSrc + sphereDirs[i]*flRadius);
+		g_Utility.TraceLine( vecSrc, vecSrc + sphereDirs[i]*flRadius, dont_ignore_monsters, g_EntityFuncs.Instance(pevInflictor).edict(), tr );
+		CBaseEntity@ pHit = g_EntityFuncs.Instance(tr.pHit);
+		if (pHit is null or attacked.exists(pHit.entindex()) or pHit.entindex() == 0)
+			continue;
+			
+		attacked[pHit.entindex()] = true;
+		
+		if (tr.fStartSolid != 0)
+		{
+			// if we're stuck inside them, fixup the position and distance
+			tr.vecEndPos = vecSrc;
+			tr.flFraction = 0.0;
+		}
+		
+		// decrease damage for an ent that's farther from the bomb.
+		flAdjustedDamage = ( vecSrc - tr.vecEndPos ).Length() * falloff;
+		flAdjustedDamage = flDamage - flAdjustedDamage;
+	
+		if ( flAdjustedDamage < 0 )
+		{
+			flAdjustedDamage = 0;
+		}
+	
+		if (tr.flFraction != 1.0)
+		{
+			g_WeaponFuncs.ClearMultiDamage( );
+			pHit.TraceAttack( pevInflictor, flAdjustedDamage, (tr.vecEndPos - vecSrc).Normalize( ), tr, bitsDamageType );
+			g_WeaponFuncs.ApplyMultiDamage( pevInflictor, pevAttacker );
+		}
+		else
+		{
+			pHit.TakeDamage ( pevInflictor, pevAttacker, flAdjustedDamage, bitsDamageType );
+		}
+	}
+	
 }
 
 void animate_view_angles(EHandle h_plr, Vector start_angle, Vector add_angle, float startTime, float endTime)
