@@ -819,7 +819,8 @@ void AttackEffects(WeaponState& state, bool windupAttack=false)
 	if (attacker.IsPlayer())
 	{
 		bool emptyClip = state.c_wep.settings.clip_size() <= 0 or state.wep.m_iClip <= 0;
-		if (AmmoLeft(state, state.active_ammo_type) <= 0 and emptyClip and state.c_wep.settings.pev.spawnflags & 16 != 0)
+		if (AmmoLeft(state, state.active_ammo_type) <= 0 and emptyClip and 
+			state.c_wep.settings.pev.spawnflags & FL_WEP_EXHAUSTIBLE != 0)
 		{
 			if (state.liveProjectiles > 0 and state.c_wep.settings.pev.spawnflags & FL_WEP_WAIT_FOR_PROJECTILES != 0)
 			{
