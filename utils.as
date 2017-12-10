@@ -1129,18 +1129,94 @@ void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vect
 			
 			ownerEnt.SetClassification(CLASS_PLAYER);
 			
-			g_WeaponFuncs.RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
+			RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
 			
 			for (uint i = 0; i < victims.length(); i++)
 				victims[i].SetClassification(oldClassify[i]);
 		}
 		else
-			g_WeaponFuncs.RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
+		{
+			RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
+		}
 	}
 	
 	if (effect.explode_smoke_spr.Length() > 0)
 		g_Scheduler.SetTimeout("delayed_smoke", effect.explode_smoke_delay, pos, 
 								effect.explode_smoke_spr, smokeScale, smokeFps);
+}
+
+void RadiusDamage( Vector vecSrc, entvars_t@ pevInflictor, entvars_t@ pevAttacker, float flDamage, float flRadius, int iClassIgnore, int bitsDamageType )
+{
+	CBaseEntity@ pEntity = null;
+	TraceResult	tr;
+	float flAdjustedDamage, falloff;
+	Vector vecSpot;
+
+	if ( flRadius > 0 )
+		falloff = flDamage / flRadius;
+	else
+		falloff = 1.0;
+
+	bool bInWater = (g_EngineFuncs.PointContents(vecSrc) == CONTENTS_WATER);
+
+	vecSrc.z += 1;// in case grenade is lying on the ground
+
+	if ( pevAttacker is null )
+		@pevAttacker = @pevInflictor;
+		
+	// iterate on all entities in the vicinity.
+	while ((@pEntity = g_EntityFuncs.FindEntityInSphere( pEntity, vecSrc, flRadius, "*", "classname" )) != null)
+	{
+		println("CHeck " + pEntity.pev.classname);
+		if ( pEntity.pev.takedamage != DAMAGE_NO )
+		{
+			// UNDONE: this should check a damage mask, not an ignore
+			if ( iClassIgnore != CLASS_NONE && pEntity.Classify() == iClassIgnore )
+			{// houndeyes don't hurt other houndeyes with their attack
+				continue;
+			}
+
+			// blast's don't tavel into or out of water
+			if (bInWater && pEntity.pev.waterlevel == 0)
+				continue;
+			if (!bInWater && pEntity.pev.waterlevel == 3)
+				continue;
+
+			vecSpot = pEntity.BodyTarget( vecSrc );
+			
+			g_Utility.TraceLine( vecSrc, vecSpot, dont_ignore_monsters, g_EntityFuncs.Instance(pevInflictor).edict(), tr );
+
+			if ( tr.flFraction == 1.0 || g_EntityFuncs.Instance(tr.pHit).entindex() == g_EntityFuncs.Instance(pEntity.edict()).entindex() )
+			{// the explosion can 'see' this entity, so hurt them!
+				if (tr.fStartSolid != 0)
+				{
+					// if we're stuck inside them, fixup the position and distance
+					tr.vecEndPos = vecSrc;
+					tr.flFraction = 0.0;
+				}
+				
+				// decrease damage for an ent that's farther from the bomb.
+				flAdjustedDamage = ( vecSrc - tr.vecEndPos ).Length() * falloff;
+				flAdjustedDamage = flDamage - flAdjustedDamage;
+			
+				if ( flAdjustedDamage < 0 )
+				{
+					flAdjustedDamage = 0;
+				}
+			
+				if (tr.flFraction != 1.0)
+				{
+					g_WeaponFuncs.ClearMultiDamage( );
+					pEntity.TraceAttack( pevInflictor, flAdjustedDamage, (tr.vecEndPos - vecSrc).Normalize( ), tr, bitsDamageType );
+					g_WeaponFuncs.ApplyMultiDamage( pevInflictor, pevAttacker );
+				}
+				else
+				{
+					pEntity.TakeDamage ( pevInflictor, pevAttacker, flAdjustedDamage, bitsDamageType );
+				}
+			}
+		}
+	}
 }
 
 void animate_view_angles(EHandle h_plr, Vector start_angle, Vector add_angle, float startTime, float endTime)
