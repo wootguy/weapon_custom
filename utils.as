@@ -755,12 +755,12 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			int oldClass2 = ent.GetClassification(0);
 			owner.SetClassification(CLASS_PLAYER);
 			ent.SetClassification(CLASS_ALIEN_MILITARY);
-			g_WeaponFuncs.ApplyMultiDamage(owner.pev, ent.pev);
+			g_WeaponFuncs.ApplyMultiDamage(owner.pev, owner.pev);
 			owner.SetClassification(oldClass1);
 			ent.SetClassification(oldClass2);
 		}
 		else
-			g_WeaponFuncs.ApplyMultiDamage(owner.pev, ent.pev);
+			g_WeaponFuncs.ApplyMultiDamage(owner.pev, owner.pev);
 			
 		if (dmgType & DMG_LAUNCH == 0) // prevent high damage from launching unless we ask for it
 			ent.pev.velocity = oldVel;
