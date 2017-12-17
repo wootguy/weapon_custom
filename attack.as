@@ -1495,7 +1495,9 @@ CBaseEntity@ ShootProjectile(WeaponState& state)
 			Vector angles;
 			g_EngineFuncs.VecToAngles(tr.vecPlaneNormal, angles);
 			angles.x *= -1; // not sure why hlsdk doesn't do this
-			@shootEnt = ShootCustomProjectile(state, "monster_tripmine", tripOri, projectile_velocity, angles);
+			string tripClass = options.entity_class.Length() > 0 ? options.entity_class : "monster_tripmine";
+			
+			@shootEnt = ShootCustomProjectile(state, tripClass, tripOri, projectile_velocity, angles);
 		}
 		
 	}
