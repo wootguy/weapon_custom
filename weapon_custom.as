@@ -1226,8 +1226,8 @@ class weapon_custom : ScriptBaseEntity
 		if (slotPosition == -1) // user chose "Auto"
 		{
 			slotPosition = getFreeWeaponSlotPosition(slot);
-			if (slotPosition == -1)
-				println(logPrefix + weapon_classname + " Can't fit in weapon slot " + slotPosition +". Move this weapon to another slot and try again.");
+			if (slotPosition == -1 or !isFreeWeaponSlot(slot, slotPosition))
+				println(logPrefix + weapon_classname + " Can't fit in weapon slot " + slot +". Move this weapon to another slot and try again.");
 		}
 		else if (!isFreeWeaponSlot(slot, slotPosition))
 		{
