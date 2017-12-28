@@ -280,7 +280,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		//CBaseEntity@ ent = cast<CBaseEntity@>(self);
 		//monitorWeaponbox(@ent);
 		
-		println("LE DROP ITEM");
+		//println("LE DROP ITEM");
 		getPlayer().RemovePlayerItem(self);
 		
 		return self;
