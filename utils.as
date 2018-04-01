@@ -334,7 +334,7 @@ class DecalTarget
 	Vector pos;
 	TraceResult tr;
 	string texture;
-	CBaseEntity@ ent; // for when the target is a brush entity, not the world (0 = world)
+	EHandle ent; // for when the target is a brush entity, not the world (0 = world)
 }
 
 class BeamImpact
@@ -396,7 +396,7 @@ DecalTarget getProjectileDecalTarget(CBaseEntity@ ent, Vector pos, float searchD
 			decalTarget.tr = tr;
 			if (tr.pHit !is null)
 			{
-				@decalTarget.ent = g_EntityFuncs.Instance( tr.pHit );
+				decalTarget.ent = EHandle(g_EntityFuncs.Instance( tr.pHit ));
 				// get the texture too, we might need that for something
 				decalTarget.texture = g_Utility.TraceTexture( tr.pHit, src, end );
 			}
@@ -921,7 +921,7 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, EHandle creator, EH
 	if (effect.pev.spawnflags & FL_EFFECT_EXPLOSION != 0)
 	{
 		Vector exp_pos = pos;
-		if (dt.ent !is null)
+		if (dt.ent)
 			exp_pos = exp_pos + dt.tr.vecPlaneNormal*effect.explode_offset;
 		custom_explosion(exp_pos, vel, effect, dt.pos, dt.ent, owner, inWater, friendlyFire);
 	}
@@ -1012,7 +1012,7 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, EHandle creator, EH
 		te_streaksplash(pos, dt.tr.vecPlaneNormal, effect.rico_trace_color,
 						effect.rico_trace_count, effect.rico_trace_speed, effect.rico_trace_rand);
 	}
-	if (effect.rico_decal != DECAL_NONE)
+	if (effect.rico_decal != DECAL_NONE and dt.ent)
 	{
 		string decal = getBulletDecalOverride(dt.ent, getDecal(effect.rico_decal));
 		if (effect.pev.spawnflags & FL_EFFECT_GUNSHOT_RICOCHET != 0)
