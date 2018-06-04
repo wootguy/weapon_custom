@@ -117,6 +117,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		info.iMaxAmmo1 	= 9999999;
 		info.iMaxAmmo2 	= 9999999;
 		
+		info.iAmmo1Drop	= settings.primary_ammo_drop_amt;
+		info.iAmmo2Drop	= settings.secondary_ammo_drop_amt;
+		
 		info.iMaxClip = 9999999; // just prevents dynamic clip sizes from working
 		if (settings.clip_size() < 1)
 			self.m_iClip = -1;

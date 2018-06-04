@@ -400,6 +400,12 @@ class ProjectileOptions
 	float bounce_effect_delay;
 };
 
+class AmmoDrop
+{
+	string cname;
+	int dropAmt = 0;
+}
+
 class weapon_custom_bullet : weapon_custom_shoot
 {
 	void Spawn()
@@ -973,6 +979,8 @@ class weapon_custom : ScriptBaseEntity
 	WeaponSound primary_reload_snd;
 	WeaponSound primary_empty_snd;
 	string primary_ammo_type;
+	string primary_ammo_drop_class;
+	int primary_ammo_drop_amt;
 	float primary_regen_time;
 	int primary_regen_amt;
 	int default_ammo;
@@ -982,6 +990,8 @@ class weapon_custom : ScriptBaseEntity
 	WeaponSound secondary_reload_snd;
 	WeaponSound secondary_empty_snd;
 	string secondary_ammo_type;
+	string secondary_ammo_drop_class;
+	int secondary_ammo_drop_amt;
 	float secondary_regen_time;
 	int secondary_regen_amt;
 	
@@ -1065,6 +1075,7 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "primary_reload_snd") primary_reload_snd.file = szValue;
 		else if (szKey == "primary_empty_snd") primary_empty_snd.file = szValue;
 		else if (szKey == "primary_ammo") primary_ammo_type = szValue;
+		else if (szKey == "primary_ammo_drop") primary_ammo_drop_class = szValue;
 		else if (szKey == "primary_regen_time") primary_regen_time = atof(szValue);
 		else if (szKey == "primary_regen_amt") primary_regen_amt = atoi(szValue);
 		
@@ -1073,6 +1084,7 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "secondary_reload_snd") secondary_reload_snd.file = szValue;
 		else if (szKey == "secondary_empty_snd") secondary_empty_snd.file = szValue;
 		else if (szKey == "secondary_ammo") secondary_ammo_type = szValue;
+		else if (szKey == "secondary_ammo_drop") secondary_ammo_drop_class = szValue;
 		else if (szKey == "secondary_regen_time") secondary_regen_time = atof(szValue);
 		else if (szKey == "secondary_regen_amt") secondary_regen_amt = atoi(szValue);
 		
@@ -1305,11 +1317,119 @@ class weapon_custom : ScriptBaseEntity
 		return time;
 	}
 	
+	AmmoDrop getSmallestAmmoDropType(string ammoType)
+	{
+		AmmoDrop best;
+		
+		if (ammoType == "buckshot") {
+			best.cname = "ammo_buckshot";
+		} else if (ammoType == "556") {
+			best.cname = "ammo_556";
+		} else if (ammoType == "m40a1") {
+			best.cname = "ammo_762";
+		} else if (ammoType == "argrenades") {
+			best.cname = "ammo_ARgrenades";
+		} else if (ammoType == "357") {
+			best.cname = "ammo_357";
+		} else if (ammoType == "9mm") {
+			best.cname = "ammo_9mmclip";
+		} else if (ammoType == "sporeclip") {
+			best.cname = "ammo_sporeclip";
+		} else if (ammoType == "uranium") {
+			best.cname = "ammo_gaussclip";
+		} else if (ammoType == "rockets") {
+			best.cname = "ammo_rpgclip";
+		} else if (ammoType == "bolts") {
+			best.cname = "ammo_crossbow";
+		}
+		best.dropAmt = getAmmoDropAmt(best.cname);
+		
+		// check custom ammos
+		array<string>@ keys = custom_ammos.getKeys();
+		for (uint i = 0; i < keys.length(); i++)
+		{
+			weapon_custom_ammo@ ammo = cast<weapon_custom_ammo@>( custom_ammos[keys[i]] );
+			if (ammo.custom_ammo_type == ammoType and (ammo.give_ammo < best.dropAmt or best.dropAmt == -1))
+			{
+				best.cname = ammo.ammo_classname;
+				best.dropAmt = ammo.give_ammo;
+			}
+		}
+		
+		return best;
+	}
+	
+	int getAmmoDropAmt(string ammoClass)
+	{
+		if (ammoClass.Length() == 0)
+			return -1;
+			
+		if (ammoClass == "ammo_357") {
+			return 6;
+		} else if (ammoClass == "ammo_556") {
+			return 100;
+		} else if (ammoClass == "ammo_762") {
+			return 5;
+		} else if (ammoClass == "ammo_9mmAR") {
+			return 50;
+		} else if (ammoClass == "ammo_9mmbox") {
+			return 200;
+		} else if (ammoClass == "ammo_9mmclip") {
+			return 17;
+		} else if (ammoClass == "ammo_ARgrenades") {
+			return 2;
+		} else if (ammoClass == "ammo_buckshot") {
+			return 12;
+		} else if (ammoClass == "ammo_crossbow") {
+			return 5;
+		} else if (ammoClass == "ammo_gaussclip") {
+			return 20;
+		} else if (ammoClass == "ammo_rpgclip") {
+			return 2;
+		} else if (ammoClass == "ammo_sporeclip") {
+			return 1;
+		} else if (ammoClass == "ammo_uziclip") {
+			return 32;
+		}
+		
+		array<string>@ keys = custom_ammos.getKeys();
+		for (uint i = 0; i < keys.length(); i++)
+		{
+			weapon_custom_ammo@ ammo = cast<weapon_custom_ammo@>( custom_ammos[keys[i]] );
+			if (ammo.ammo_classname == ammoClass)
+				return ammo.give_ammo;
+		}
+		
+		return -1;
+	}
+	
 	void Spawn()
 	{
 		if (weapon_classname.Length() > 0)
 		{
 			validateSettings();
+			
+			// load ammo drop amounts if a specific drop class was set
+			primary_ammo_drop_amt = getAmmoDropAmt(primary_ammo_drop_class);
+			secondary_ammo_drop_amt = getAmmoDropAmt(secondary_ammo_drop_class);
+			if (primary_ammo_drop_amt == -1 and primary_ammo_drop_class.Length() > 0)
+				println("WEAPON_CUSTOM ERROR: " + weapon_classname + " uses an invalid primary ammo drop class: " + primary_ammo_drop_class);	
+			if (secondary_ammo_drop_amt == -1 and secondary_ammo_drop_class.Length() > 0)
+				println("WEAPON_CUSTOM ERROR: " + weapon_classname + " uses an invalid primary ammo drop class: " + secondary_ammo_drop_class);
+			
+			// automatically determine ammo drop classes if none was set
+			if (primary_ammo_drop_class.Length() == 0 and primary_ammo_type.Length() > 0)
+			{
+				AmmoDrop bestMatch = getSmallestAmmoDropType(primary_ammo_type);
+				primary_ammo_drop_class = bestMatch.cname;
+				primary_ammo_drop_amt = bestMatch.dropAmt;
+			}
+			if (secondary_ammo_drop_class.Length() == 0 and secondary_ammo_type.Length() > 0)
+			{
+				AmmoDrop bestMatch = getSmallestAmmoDropType(primary_ammo_type);
+				secondary_ammo_drop_class = bestMatch.cname;
+				secondary_ammo_drop_amt = bestMatch.dropAmt;
+			}
 			
 			if (debug_mode)
 				println("Assigning " + weapon_classname + " to slot " + slot + " at position " + slotPosition);			
@@ -1318,10 +1438,14 @@ class weapon_custom : ScriptBaseEntity
 			g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomBase", weapon_classname );
 			if (pev.spawnflags & FL_WEP_HIDE_SECONDARY_AMMO != 0)
 			{
-				g_ItemRegistry.RegisterWeapon( weapon_classname, hud_sprite_folder, primary_ammo_type, "" );
+				g_ItemRegistry.RegisterWeapon( weapon_classname, hud_sprite_folder, primary_ammo_type, "", 
+					primary_ammo_drop_class, secondary_ammo_drop_class);
 			}
 			else
-				g_ItemRegistry.RegisterWeapon( weapon_classname, hud_sprite_folder, primary_ammo_type, secondary_ammo_type );
+			{
+				g_ItemRegistry.RegisterWeapon( weapon_classname, hud_sprite_folder, primary_ammo_type, secondary_ammo_type,
+					primary_ammo_drop_class, secondary_ammo_drop_class);
+			}
 			matchingAmmoTypes = primary_ammo_type.ToLowercase() == secondary_ammo_type.ToLowercase();
 			Precache();
 		}
