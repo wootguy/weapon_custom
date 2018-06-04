@@ -70,8 +70,12 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	{
 		if (pActivator == pCaller and pCaller.IsPlayer())
 		{
-			used = true; // allow pickups for time frame
-			self.Collect(pActivator);
+			CBasePlayer@ plr = cast<CBasePlayer@>(pCaller);
+			if (@plr.HasNamedPlayerItem(self.pev.classname) == null)
+			{
+				used = true; // allow pickups for time frame
+				self.Collect(pActivator);
+			}
 		}
 	}
 	
