@@ -25,6 +25,7 @@
 	//primary_reload_snd(string) : "Primary Reload Sound" : ""
 	primary_empty_snd(string) : "Primary Empty Sound" : ""
 	primary_ammo(string) : "Primary Ammo Type" : ""
+	primary_ammo_drop(string) : "Primary Ammo Drop Class" : ""
 	primary_regen_time(string) : "Primary Ammo Regen Time" : "1"
 	primary_regen_amt(string) : "Primary Ammo Regen Amount" : "0"
 	
@@ -40,6 +41,7 @@
 	// secondary_reload_snd(string) : "Secondary Reload Sound" : ""
 	secondary_empty_snd(string) : "Secondary Empty Sound" : ""
 	secondary_ammo(string) : "Secondary Ammo Type" : ""
+	secondary_ammo_drop(string) : "Secondary Ammo Drop Class" : ""
 	secondary_regen_time(string) : "Secondary Ammo Regen Time" : "1"
 	secondary_regen_amt(string) : "Secondary Ammo Regen Amount" : "0"
 	
