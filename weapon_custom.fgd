@@ -16,14 +16,13 @@
 	
 	targetname(target_source) : "Name"
 	weapon_name(string) : "Weapon Class" : "weapon_test"
-	skin(integer) : "Clip Size (0 = none used)" : 80
 	default_ammo(integer) : "Default Ammo (-1 = full clip)" : -1
 	movespeed(string) : "Movement Speed Multiplier" : "1.0"
 	
 	primary_fire(string) : "Primary Fire"
 	primary_alt_fire(string) : "Primary Alternate Fire"
-	//primary_reload_snd(string) : "Primary Reload Sound" : ""
 	primary_empty_snd(string) : "Primary Empty Sound" : ""
+	skin(integer) : "Primary Clip Size (0 = none used)" : 80
 	primary_ammo(string) : "Primary Ammo Type" : ""
 	primary_ammo_drop(string) : "Primary Ammo Drop Class" : ""
 	primary_regen_time(string) : "Primary Ammo Regen Time" : "1"
@@ -38,8 +37,9 @@
 		4 : "Windup Primary Fire"
 	]
 	secondary_fire(string) : "Secondary Fire"
-	// secondary_reload_snd(string) : "Secondary Reload Sound" : ""
 	secondary_empty_snd(string) : "Secondary Empty Sound" : ""
+	secondary_clip(integer) : "Secondary Clip Size (0 = none used)" : 0
+	default_ammo2(integer) : "Secondary Default Ammo (-1 = full clip)" : -1
 	secondary_ammo(string) : "Secondary Ammo Type" : ""
 	secondary_ammo_drop(string) : "Secondary Ammo Drop Class" : ""
 	secondary_regen_time(string) : "Secondary Ammo Regen Time" : "1"
@@ -93,6 +93,15 @@
 	reload_ammo_amt(string) : "Reload Staged Ammo Amount" : "1"
 	user_effect1(string) : "Reload User Effect" : ""
 	user_effect2(string) : "Reload Empty User Effect" : ""
+	reload_mode2(choices) : "Secondary Reload Mode" : 0 =
+	[
+		0 : "Simple"
+		3 : "Effect Chain"
+	]
+	reload_time2(string) : "Secondary Reload Time" : "1"
+	reload_anim2(string) : "Secondary Reload Animation" : "1"
+	reload_snd2(string) : "Secondary Reload Sound" : "1"
+	user_effect_r2(string) : "Secondary Reload User Effect" : ""
 	
 	deploy_time(string) : "Deploy Time" : "0.5"
 	deploy_anim(string) : "Deploy Animation" : ""
