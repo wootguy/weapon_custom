@@ -1,6 +1,8 @@
 #include "utils"
 #include "attack"
 
+namespace WeaponCustom {
+
 enum MOVE_STATES {
 	MOVE_WAIT,
 	MOVE_WALK,
@@ -553,4 +555,6 @@ class MonsterCustomBase : ScriptBaseMonsterEntity
 		println("GET SCHEDULE FOR STATE: " + self.m_MonsterState);
 		return BaseClass.GetSchedule();
 	}
+}
+
 }

@@ -2,31 +2,40 @@
 #include "WeaponCustomBase"
 #include "monster_custom"
 
-string g_watersplash_spr = "sprites/wep_smoke_01.spr";
-
 void WeaponCustomMapInit()
+{
+	WeaponCustom::WeaponCustomMapInit_internal();
+}
+
+
+void WeaponCustomMapActivate()
+{
+	WeaponCustom::WeaponCustomMapActivate_internal();
+}
+
+namespace WeaponCustom {
+
+void WeaponCustomMapInit_internal()
 {	
 	g_Game.PrecacheModel( g_watersplash_spr ); // used for water splash effect
 	
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom", "weapon_custom" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_ammo", "weapon_custom_ammo" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom", "weapon_custom" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_ammo", "weapon_custom_ammo" );
 	
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_shoot", "weapon_custom_shoot" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_bullet", "weapon_custom_bullet" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_melee", "weapon_custom_melee" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_projectile", "weapon_custom_projectile" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_beam", "weapon_custom_beam" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_shoot", "weapon_custom_shoot" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_bullet", "weapon_custom_bullet" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_melee", "weapon_custom_melee" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_projectile", "weapon_custom_projectile" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_beam", "weapon_custom_beam" );
 	
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_sound", "weapon_custom_sound" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_effect", "weapon_custom_effect" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "weapon_custom_user_effect", "weapon_custom_user_effect" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_sound", "weapon_custom_sound" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_effect", "weapon_custom_effect" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::weapon_custom_user_effect", "weapon_custom_user_effect" );
 	
-	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomProjectile", "custom_projectile" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::WeaponCustomProjectile", "custom_projectile" );
 }
 
-bool g_map_activated = false;
-
-void WeaponCustomMapActivate()
+void WeaponCustomMapActivate_internal()
 {
 	g_map_activated = true;
 	// Hook up weapon_custom with weapon_custom_shoot
@@ -46,6 +55,9 @@ void WeaponCustomMapActivate()
 		shoot.loadExternalEffectSettings();
 	}
 }
+
+bool g_map_activated = false;
+string g_watersplash_spr = "sprites/wep_smoke_01.spr";
 
 // WeaponCustomBase will read this to get weapon_custom settings
 // Also let's us know which weapon slots are used (Auto weapon slot position depends on this)
@@ -1452,7 +1464,7 @@ class weapon_custom : ScriptBaseEntity
 				println("Assigning " + weapon_classname + " to slot " + slot + " at position " + slotPosition);			
 		
 			custom_weapons[weapon_classname] = @this;
-			g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustomBase", weapon_classname );
+			g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::WeaponCustomBase", weapon_classname );
 			if (pev.spawnflags & FL_WEP_HIDE_SECONDARY_AMMO != 0)
 			{
 				g_ItemRegistry.RegisterWeapon( weapon_classname, hud_sprite_folder, primary_ammo_type, "", 
@@ -1539,7 +1551,7 @@ class weapon_custom_ammo : ScriptBaseEntity
 		if (ammo_classname.Length() > 0)
 		{		
 			custom_ammos[ammo_classname] = @this;
-			g_CustomEntityFuncs.RegisterCustomEntity( "AmmoCustomBase", ammo_classname );
+			g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::AmmoCustomBase", ammo_classname );
 			Precache();
 		}
 		else
@@ -2079,3 +2091,5 @@ class weapon_custom_user_effect : ScriptBaseEntity
 			custom_user_effect(h_plr, h_wep, @this);
 	}
 };
+
+}
