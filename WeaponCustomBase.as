@@ -578,7 +578,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		self.SendWeaponAnim( reloadAnim, 0, w_body() );
 		state.reloadFinishTime = g_Engine.time + reloadTime;
-		state.reloading = state.reloading2 = -1;
+		if (reloadingSecondary)
+			state.reloading2 = -1;
+		else
+			state.reloading = -1;
 		self.pev.nextthink = g_Engine.time;
 			
 		return true;
