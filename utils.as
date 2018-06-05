@@ -1,5 +1,7 @@
 #include "attack"
 
+namespace WeaponCustom {
+
 class Color
 { 
 	uint8 r, g, b, a;
@@ -2229,3 +2231,5 @@ void te_teleport(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ 
 void te_implosion(Vector pos, uint8 radius=255, uint8 count=32, uint8 life=5, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null){NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_IMPLOSION);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteByte(radius);m.WriteByte(count);m.WriteByte(life);m.End();}
 void te_playersprites(CBasePlayer@ target, string sprite="sprites/bubble.spr", uint8 count=16, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_PLAYERSPRITES);m.WriteShort(target.entindex());m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteByte(0);m.End();}
 void te_bloodstream(Vector pos, Vector dir, uint8 color=70, uint8 speed=64, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_BLOODSTREAM);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteCoord(dir.x);m.WriteCoord(dir.y);m.WriteCoord(dir.z);m.WriteByte(color);m.WriteByte(speed);m.End();}
+
+}

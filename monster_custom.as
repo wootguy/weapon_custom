@@ -4,13 +4,20 @@
 
 void MonsterCustomMapInit()
 {	
-	g_CustomEntityFuncs.RegisterCustomEntity( "monster_custom", "monster_custom" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "monster_custom_event", "monster_custom_event" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "monster_custom_damage", "monster_custom_damage" );
-	g_CustomEntityFuncs.RegisterCustomEntity( "MonsterCustomBase", "monster_custom_generic" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::monster_custom", "monster_custom" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::monster_custom_event", "monster_custom_event" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::monster_custom_damage", "monster_custom_damage" );
+	g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::MonsterCustomBase", "monster_custom_generic" );
 }
 
 void MonsterCustomMapActivate()
+{
+	WeaponCustom::MonsterCustomMapActivate_internal();
+}
+
+namespace WeaponCustom {
+
+void MonsterCustomMapActivate_internal()
 {
 	// Hook up monster_custom_event with weapon_custom_shoot
 	for (uint i = 0; i < all_monster_events.length(); i++)
@@ -94,7 +101,7 @@ class monster_custom : ScriptBaseEntity
 		if (monster_classname.Length() > 0)
 		{		
 			custom_monsters[monster_classname] = @this;
-			g_CustomEntityFuncs.RegisterCustomEntity( "MonsterCustomBase", monster_classname );
+			g_CustomEntityFuncs.RegisterCustomEntity( "WeaponCustom::MonsterCustomBase", monster_classname );
 			Precache();
 		}
 		else
@@ -264,3 +271,5 @@ class monster_custom_damage : ScriptBaseEntity
 			println("MONSTER_CUSTOM ERROR: a monster_custom_damage has no monster class specified");
 	}	
 };
+
+}

@@ -1,4 +1,6 @@
 
+namespace WeaponCustom {
+
 // State shared between weapons and monsters
 class WeaponState
 {
@@ -2119,4 +2121,6 @@ bool AttackMonster(WeaponState& state, Vector vecSrc, TraceResult tr)
 	}
 	
 	return true;
+}
+
 }

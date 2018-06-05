@@ -1,5 +1,7 @@
 #include "attack"
 
+namespace WeaponCustom {
+
 class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 {
 	float m_flNextAnimTime;
@@ -744,4 +746,6 @@ class AmmoCustomBase : ScriptBasePlayerAmmoEntity
 		}
 		return false;
 	}
+}
+
 }
