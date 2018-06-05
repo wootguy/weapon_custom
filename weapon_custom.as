@@ -456,6 +456,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 	int shoot_empty_anim;
 	int ammo_cost;
 	float cooldown = 0.5;
+	float cooldown_fail = 0.5;
 	Vector recoil;
 	Vector kickback;
 	Vector knockback;
@@ -572,6 +573,7 @@ class weapon_custom_shoot : ScriptBaseEntity
 		else if (szKey == "ammo_cost")     ammo_cost = atoi(szValue);			
 		//else if (szKey == "shoot_type")    shoot_type = atoi(szValue);			
 		else if (szKey == "cooldown")      cooldown = atof(szValue);
+		else if (szKey == "cooldown_fail") cooldown_fail = atof(szValue);
 		else if (szKey == "recoil")        recoil = parseVector(szValue);
 		else if (szKey == "kickback")      kickback = parseVector(szValue);
 		else if (szKey == "knockback")     knockback = parseVector(szValue);

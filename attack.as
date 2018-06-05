@@ -883,12 +883,12 @@ void DoAttack(WeaponState& state, bool windupAttack=false)
 	AttackEffects(state, windupAttack);
 }
 
-void Cooldown(WeaponState& state, weapon_custom_shoot@ opts)
+void Cooldown(WeaponState& state, weapon_custom_shoot@ opts, bool failureCooldown=false)
 {
 	if (!state.user.IsPlayer())
 		return; // TODO: Monster cooldown?
 	// cooldown
-	float cooldownVal = opts.cooldown;
+	float cooldownVal = failureCooldown ? opts.cooldown_fail : opts.cooldown;
 	if (opts.shoot_type == SHOOT_MELEE and (!state.meleeHit or state.abortAttack))
 		cooldownVal = opts.melee_miss_cooldown;
 	if (state.windupOvercharged)
@@ -910,7 +910,7 @@ bool FailAttack(WeaponState& state, weapon_custom_shoot@ opts)
 	if (snd !is null)
 		snd.play(state.user, CHAN_WEAPON);
 		
-	Cooldown(state, opts);
+	Cooldown(state, opts, true);
 	return true;
 }
 

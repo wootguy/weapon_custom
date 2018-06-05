@@ -344,6 +344,7 @@
 	shoot_fail_snds(string) : "Shoot Failure Sounds" : ""
 	ammo_cost(string) : "Ammo Cost" : "1"
 	cooldown(string) : "Cooldown" : "0.15"
+	cooldown_empty(string) : "Cooldown On Fail/Empty" : "0.5"
 	bullet_spread(string) : "Accuracy (Degrees)" : "0"
 	bullet_spread_func(choices) : "Accuracy Function" : 0 =
 	[
