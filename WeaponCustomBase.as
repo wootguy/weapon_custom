@@ -73,6 +73,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void Use(CBaseEntity@ pActivator, CBaseEntity@ pCaller, USE_TYPE useType, float flValue = 0.0f)
 	{
+		if (pActivator is null or pCaller is null)
+			return;
 		if (pActivator == pCaller and pCaller.IsPlayer())
 		{
 			CBasePlayer@ plr = cast<CBasePlayer@>(pCaller);
@@ -178,6 +180,20 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		return false;
 	}
 	
+	void updateBaseMoveSpeed()
+	{
+		CBasePlayer@ plr = getPlayer();
+		if (baseMoveSpeed < 0)
+		{
+			baseMoveSpeed = plr.pev.maxspeed;
+			if (baseMoveSpeed <= 0)
+			{
+				// 0 = use default speed. So, just set the default speed so the multiplier works.
+				baseMoveSpeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
+			}
+		}
+	}
+	
 	bool Deploy(bool skipDelay)
 	{
 		CBasePlayer@ plr = getPlayer();
@@ -208,12 +224,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			state.deployTime = g_Engine.time;
 		}
 		
-		baseMoveSpeed = plr.pev.maxspeed;
-		if (baseMoveSpeed == 0)
-		{
-			// 0 = use default speed. So, just set the default speed so the multiplier works.
-			baseMoveSpeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
-		}
+		updateBaseMoveSpeed();
 		
 		settings.deploy_snd.play(plr, CHAN_VOICE);
 		
@@ -270,6 +281,11 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void applyPlayerSpeedMult()
 	{
 		CBasePlayer@ plr = getPlayer();
+		if (!plr.m_hActiveItem.IsValid() or string(plr.m_hActiveItem.GetEntity().pev.classname) != string(pev.classname))
+			return;
+		
+		updateBaseMoveSpeed();
+		
 		float mult = settings.movespeed;
 		if (state.windingUp and !state.windingDown and !state.windupShooting)
 			mult *= state.active_opts.windup_movespeed;
@@ -286,6 +302,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	CBasePlayerItem@ DropItem()
 	{
+		CBasePlayer@ plr = getPlayer();
+		plr.pev.maxspeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
+		baseMoveSpeed = -1;
 		//self.pev.body = 3;
 		//self.pev.sequence = 8;
 		shouldRespawn = false;
@@ -294,7 +313,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		//monitorWeaponbox(@ent);
 		
 		//println("LE DROP ITEM");
-		getPlayer().RemovePlayerItem(self);
+		plr.RemovePlayerItem(self);
 		
 		return self;
 	}

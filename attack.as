@@ -933,8 +933,9 @@ bool EmptyShoot(WeaponState& state)
 	// TODO: Monster ammo
 	if (state.user.IsPlayer())
 	{
-		int clip_size = state.active_opts.isPrimary() ? state.c_wep.settings.clip_size() : state.c_wep.settings.clip_size2;
-		int clip = state.active_opts.isPrimary() ? state.wep.m_iClip : state.wep.m_iClip2;
+		bool isPrimary = state.active_opts is null or state.active_opts.isPrimary();
+		int clip_size = isPrimary ? state.c_wep.settings.clip_size() : state.c_wep.settings.clip_size2;
+		int clip = isPrimary ? state.wep.m_iClip : state.wep.m_iClip2;
 		
 		return ((clip_size > 0 and clip == 0) or 
 				(clip_size == 0 and AmmoLeft(state, state.active_ammo_type) == 0));

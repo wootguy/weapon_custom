@@ -1088,7 +1088,7 @@ class weapon_custom : ScriptBaseEntity
 		// Only custom keyvalues get sent here
 		if (szKey == "weapon_name") weapon_classname = szValue;
 		
-		else if (szKey == "movespeed") { update_active_weapons(szKey, szValue); movespeed = atof(szValue); }
+		else if (szKey == "movespeed") { movespeed = atof(szValue); update_active_weapons(szKey, szValue); }
 		else if (szKey == "default_ammo") default_ammo = atoi(szValue);
 		else if (szKey == "default_ammo2") default_ammo2 = atoi(szValue);
 		
