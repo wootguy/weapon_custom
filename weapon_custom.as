@@ -976,7 +976,6 @@ class weapon_custom : ScriptBaseEntity
 	
 	string primary_fire; // targetname of weapon_custom_shoot
 	string primary_alt_fire;
-	WeaponSound primary_reload_snd;
 	WeaponSound primary_empty_snd;
 	string primary_ammo_type;
 	string primary_ammo_drop_class;
@@ -984,10 +983,10 @@ class weapon_custom : ScriptBaseEntity
 	float primary_regen_time;
 	int primary_regen_amt;
 	int default_ammo;
+	int default_ammo2 = -1;
 	
 	int secondary_action;
 	string secondary_fire;
-	WeaponSound secondary_reload_snd;
 	WeaponSound secondary_empty_snd;
 	string secondary_ammo_type;
 	string secondary_ammo_drop_class;
@@ -1015,16 +1014,16 @@ class weapon_custom : ScriptBaseEntity
 	array<string> idle_anims;
 	
 	float idle_time;
-	float reload_time;
 	float deploy_time;
+	WeaponSound deploy_snd;
 	
 	float movespeed;
 	
-	WeaponSound deploy_snd;
 	WeaponSound reload_snd;
 	WeaponSound reload_start_snd;
 	WeaponSound reload_end_snd;
 	WeaponSound reload_cancel_snd;
+	float reload_time;
 	float reload_start_time;
 	float reload_end_time;
 	float reload_cancel_time;
@@ -1036,9 +1035,17 @@ class weapon_custom : ScriptBaseEntity
 	int reload_mode;
 	int reload_ammo_amt;
 	
+	int clip_size2 = 0;
+	int reload_mode2 = 0;
+	float reload_time2 = 1;
+	int reload_anim2 = 1;
+	WeaponSound reload_snd2;
+	string user_effect_r2_str;
+	
 	weapon_custom_user_effect@ user_effect1; // reload
 	weapon_custom_user_effect@ user_effect2; // empty reload
 	weapon_custom_user_effect@ user_effect3; // 
+	weapon_custom_user_effect@ user_effect_r2; // secondary reload
 	string user_effect1_str;
 	string user_effect2_str;
 	string user_effect3_str;
@@ -1069,10 +1076,10 @@ class weapon_custom : ScriptBaseEntity
 		
 		else if (szKey == "movespeed") { update_active_weapons(szKey, szValue); movespeed = atof(szValue); }
 		else if (szKey == "default_ammo") default_ammo = atoi(szValue);
+		else if (szKey == "default_ammo2") default_ammo2 = atoi(szValue);
 		
 		else if (szKey == "primary_fire") { primary_fire = szValue; relink = true; }
 		else if (szKey == "primary_alt_fire") { primary_alt_fire = szValue; relink = true; }
-		else if (szKey == "primary_reload_snd") primary_reload_snd.file = szValue;
 		else if (szKey == "primary_empty_snd") primary_empty_snd.file = szValue;
 		else if (szKey == "primary_ammo") primary_ammo_type = szValue;
 		else if (szKey == "primary_ammo_drop") primary_ammo_drop_class = szValue;
@@ -1081,7 +1088,6 @@ class weapon_custom : ScriptBaseEntity
 		
 		else if (szKey == "secondary_action") secondary_action = atoi(szValue);
 		else if (szKey == "secondary_fire") { secondary_fire = szValue; relink = true; }
-		else if (szKey == "secondary_reload_snd") secondary_reload_snd.file = szValue;
 		else if (szKey == "secondary_empty_snd") secondary_empty_snd.file = szValue;
 		else if (szKey == "secondary_ammo") secondary_ammo_type = szValue;
 		else if (szKey == "secondary_ammo_drop") secondary_ammo_drop_class = szValue;
@@ -1095,6 +1101,7 @@ class weapon_custom : ScriptBaseEntity
 		
 		else if (szKey == "deploy_snd") deploy_snd.file = szValue;
 		else if (szKey == "reload_snd") reload_snd.file = szValue;
+		else if (szKey == "reload_snd2") reload_snd2.file = szValue;
 		else if (szKey == "reload_start_snd") reload_start_snd.file = szValue;
 		else if (szKey == "reload_end_snd") reload_end_snd.file = szValue;
 		else if (szKey == "reload_cancel_snd") reload_cancel_snd.file = szValue;
@@ -1106,9 +1113,17 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "reload_cancel_anim") reload_cancel_anim = atoi(szValue);
 		else if (szKey == "reload_ammo_amt") reload_ammo_amt = atoi(szValue);
 		else if (szKey == "reload_mode") reload_mode = atoi(szValue);
+		else if (szKey == "reload_mode2") reload_mode2 = atoi(szValue);
+		else if (szKey == "reload_anim") reload_anim = atoi(szValue);
+		else if (szKey == "reload_anim2") reload_anim2 = atoi(szValue);
+		else if (szKey == "reload_empty_anim") reload_empty_anim = atoi(szValue);
+		else if (szKey == "reload_time") reload_time = atof(szValue);
+		else if (szKey == "reload_time2") reload_time2 = atof(szValue);
+		else if (szKey == "secondary_clip") clip_size2 = atoi(szValue);
 		else if (szKey == "user_effect1") user_effect1_str = szValue;
 		else if (szKey == "user_effect2") user_effect2_str = szValue;
 		else if (szKey == "user_effect3") user_effect3_str = szValue;
+		else if (szKey == "user_effect_r2") user_effect_r2_str = szValue;
 		
 		else if (szKey == "weapon_slot") slot = atoi(szValue);
 		else if (szKey == "weapon_slot_pos") slotPosition = atoi(szValue);
@@ -1116,12 +1131,9 @@ class weapon_custom : ScriptBaseEntity
 		else if (szKey == "wpn_w_model") wpn_w_model = szValue;
 		else if (szKey == "wpn_p_model") wpn_p_model = szValue;
 		else if (szKey == "wpn_w_model_body") wpn_w_model_body = atoi(szValue);
-		else if (szKey == "reload_anim") reload_anim = atoi(szValue);
-		else if (szKey == "reload_empty_anim") reload_empty_anim = atoi(szValue);
 		else if (szKey == "deploy_anim") deploy_anim = atoi(szValue);
 		else if (szKey == "idle_anims") idle_anims = szValue.Split(";");
 		else if (szKey == "idle_time") idle_time = atof(szValue);
-		else if (szKey == "reload_time") reload_time = atof(szValue);
 		else if (szKey == "deploy_time") deploy_time = atof(szValue);
 		else if (szKey == "zoom_fov") zoom_fov = atoi(szValue);
 		
@@ -1284,11 +1296,10 @@ class weapon_custom : ScriptBaseEntity
 	
 	void loadExternalSoundSettings()
 	{
-		loadSoundSettings(primary_reload_snd);
 		loadSoundSettings(primary_empty_snd);
-		loadSoundSettings(secondary_reload_snd);
 		loadSoundSettings(secondary_empty_snd);
 		loadSoundSettings(reload_snd);
+		loadSoundSettings(reload_snd2);
 		loadSoundSettings(reload_start_snd);
 		loadSoundSettings(reload_end_snd);
 	}
@@ -1298,15 +1309,19 @@ class weapon_custom : ScriptBaseEntity
 		@user_effect1 = loadUserEffectSettings(user_effect1, user_effect1_str);
 		@user_effect2 = loadUserEffectSettings(user_effect2, user_effect2_str);
 		@user_effect3 = loadUserEffectSettings(user_effect3, user_effect3_str);
+		@user_effect_r2 = loadUserEffectSettings(user_effect_r2, user_effect_r2_str);
 	}
 	
-	float getReloadTime(bool emptyReload=false)
+	float getReloadTime(bool emptyReload=false, bool secondary=false)
 	{
 		if (reload_mode == RELOAD_SIMPLE)
-			return reload_time;
+			return secondary ? reload_time2 : reload_time;
 		
 		float time = 0;
 		weapon_custom_user_effect@ ef = emptyReload ? @user_effect2 : @user_effect1;
+		if (secondary)
+			@ef = @user_effect_r2;
+		
 		for (int i = 0; i < 128; i++) // ...just in case someone tries an endless reload loop
 		{
 			if (ef is null)
@@ -1471,12 +1486,11 @@ class weapon_custom : ScriptBaseEntity
 	
 	void Precache()
 	{
-		PrecacheSound(primary_reload_snd.file);
 		PrecacheSound(primary_empty_snd.file);
-		PrecacheSound(secondary_reload_snd.file);
 		PrecacheSound(secondary_empty_snd.file);
 		PrecacheSound(deploy_snd.file);
 		PrecacheSound(reload_snd.file);
+		PrecacheSound(reload_snd2.file);
 		PrecacheSound(reload_start_snd.file);
 		PrecacheSound(reload_end_snd.file);
 		PrecacheModel(wpn_v_model);

@@ -40,7 +40,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		self.m_iDefaultAmmo = settings.default_ammo;
 		if (self.m_iDefaultAmmo == -1)
 			self.m_iDefaultAmmo = settings.clip_size();		
+		if (settings.default_ammo2 == -1)
+			settings.default_ammo2 = settings.clip_size2;	
 		self.m_iClip = self.m_iDefaultAmmo;
+		self.m_iClip2 = settings.default_ammo2;
 		
 		self.FallInit();
 		SetThink( ThinkFunction( WeaponThink ) );
@@ -123,8 +126,9 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		info.iMaxClip = 9999999; // just prevents dynamic clip sizes from working
 		if (settings.clip_size() < 1)
 			self.m_iClip = -1;
-		
-		//self.m_iClip2 = 2; // secondary clip not working? :<
+		if (settings.clip_size2 < 1)
+			self.m_iClip2 = -1;	
+
 		info.iSlot 		= settings.slot;
 		info.iPosition 	= settings.slotPosition;
 		info.iFlags 	= settings.pev.spawnflags & 0x1F;
@@ -559,18 +563,20 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void TertiaryAttack()  { CommonAttack(2); }
 	
 	// Same as DefaultReload except it doesn't break when changing clip size mid-game
-	bool CustomReload(int reloadAnim, float reloadTime)
+	bool CustomReload(int reloadAnim, float reloadTime, bool reloadingSecondary)
 	{
 		CBasePlayer@ plr = getPlayer();
 		
-		int ammoType = self.m_iPrimaryAmmoType;
+		int ammoType = reloadingSecondary ? self.m_iSecondaryAmmoType : self.m_iPrimaryAmmoType;
 		int ammoLeft = plr.m_rgAmmo(ammoType);
-		if (ammoLeft <= 0 or self.m_iClip == settings.clip_size())
+		if (ammoLeft <= 0 or 
+			(self.m_iClip == settings.clip_size() and !reloadingSecondary) or
+			(self.m_iClip2 == settings.clip_size2 and reloadingSecondary))
 			return false;
 		
 		self.SendWeaponAnim( reloadAnim, 0, w_body() );
 		state.reloadFinishTime = g_Engine.time + reloadTime;
-		state.reloading = -1;
+		state.reloading = state.reloading2 = -1;
 		self.pev.nextthink = g_Engine.time;
 			
 		return true;
@@ -578,22 +584,27 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	void Reload()
 	{
+		bool reloadingSecondary = state.reloadSecondary;
+		state.reloadSecondary = false;
+		int reload_mode = reloadingSecondary ? settings.reload_mode2 : settings.reload_mode;
+		int clip_size = reloadingSecondary ? settings.clip_size2 : settings.clip_size();
+		int clip = reloadingSecondary ? self.m_iClip2 : self.m_iClip;
+		
 		CBasePlayer@ plr = getPlayer();
-		if (settings.clip_size() == 0)
+		if (clip_size == 0)
 			return;
-		if (!cooldownFinished(state) or state.reloading != 0)
+		if (!cooldownFinished(state) or state.reloading != 0 or state.reloading2 != 0)
 			return;
 		if (state.reloadFinishTime > g_Engine.time)
 			return;
-			
 		if (state.liveProjectiles > 0 and state.active_opts.projectile.follow_mode == FOLLOW_CROSSHAIRS)
 			return; // don't reload if we're controlling a projectile
 			
 		if (state.liveProjectiles > 0 and settings.pev.spawnflags & FL_WEP_WAIT_FOR_PROJECTILES != 0)
 			return; // don't reload if user wants to wait for projectile deaths
 		
-		if ((settings.reload_mode == RELOAD_STAGED or settings.reload_mode == RELOAD_STAGED_RESPONSIVE) and 
-			self.m_iClip < settings.clip_size() and AmmoLeft(state, state.active_ammo_type) >= settings.reload_ammo_amt)
+		if ((reload_mode == RELOAD_STAGED or reload_mode == RELOAD_STAGED_RESPONSIVE) and 
+			clip < clip_size and AmmoLeft(state, state.active_ammo_type) >= settings.reload_ammo_amt)
 		{
 			self.SendWeaponAnim( settings.reload_start_anim, 0, w_body() );
 			state.reloading = 1;
@@ -610,24 +621,31 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		int reloadAnim = settings.reload_empty_anim;
 		if (reloadAnim < 0 or !emptyReload)
 			reloadAnim = settings.reload_anim;
+		if (reloadingSecondary)
+			reloadAnim = settings.reload_anim2;
 			
 		bool emptyReloadEffect = emptyReload and settings.user_effect2 !is null;
-		float reload_time = settings.getReloadTime(emptyReloadEffect);
+		float reload_time = settings.getReloadTime(emptyReloadEffect, reloadingSecondary);
 			
-		bool reloaded = CustomReload(reloadAnim, reload_time);
+		bool reloaded = CustomReload(reloadAnim, reload_time, reloadingSecondary);
 		
 		if (reloaded)
 		{
-			if (settings.reload_mode == RELOAD_EFFECT_CHAIN)
+			if (reload_mode == RELOAD_EFFECT_CHAIN)
 			{
 				EHandle h_plr = plr;
 				EHandle h_wep = cast<CBaseEntity@>(self);
 				weapon_custom_user_effect@ ef = emptyReloadEffect ? @settings.user_effect2 : @settings.user_effect1;
+				if (reloadingSecondary)
+					@ef = @settings.user_effect_r2;
 				custom_user_effect(h_plr, h_wep, ef, false);
 			}
 		
 			CancelZoom();
-			settings.reload_snd.play(plr, CHAN_VOICE);
+			if (reloadingSecondary)
+				settings.reload_snd2.play(plr, CHAN_VOICE);
+			else
+				settings.reload_snd.play(plr, CHAN_VOICE);
 			state.unhideLaserTime = WeaponTimeBase() + reload_time;
 		}
 		
@@ -666,7 +684,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		self.ResetEmptySound();
 		
-		if( self.m_flTimeWeaponIdle > WeaponTimeBase() or state.windingUp or state.reloading != 0 or state.nextActionTime > g_Engine.time)
+		if( self.m_flTimeWeaponIdle > WeaponTimeBase() or state.windingUp or state.reloading != 0 or state.reloading2 != 0 or state.nextActionTime > g_Engine.time)
 			return;
 
 		if (settings.idle_time > 0) {

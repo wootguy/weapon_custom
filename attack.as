@@ -65,6 +65,8 @@ class WeaponState
 	int active_ammo_type = -1;
 	int liveProjectiles = 0;
 	int reloading = 0; // continous reload state
+	int reloading2 = 0; // secondary reload state
+	bool reloadSecondary = false;
 	
 	float lastPrimaryRegen = 0;
 	float lastSecondaryRegen = 0;
@@ -178,17 +180,24 @@ void AttackThink(WeaponState& state)
 	}
 	
 	// finish a simple reload
-	if (state.reloading < 0 and state.reloadFinishTime < g_Engine.time and attacker.IsPlayer())
+	if ((state.reloading < 0 or state.reloading2 < 0) and state.reloadFinishTime < g_Engine.time and attacker.IsPlayer())
 	{
 		CBasePlayer@ plr = cast<CBasePlayer@>(attacker);
-		int ammoType = state.wep.m_iPrimaryAmmoType;
+		bool reloadedSecondary = state.reloading2 < 0;
+		int clip_size = reloadedSecondary ? state.c_wep.settings.clip_size2 : state.c_wep.settings.clip_size();
+		int clip = reloadedSecondary ? state.wep.m_iClip2 : state.wep.m_iClip;
+		
+		int ammoType = reloadedSecondary ? state.wep.m_iSecondaryAmmoType : state.wep.m_iPrimaryAmmoType;
 		int ammoLeft = plr.m_rgAmmo(ammoType);
-		int clipNeeded = state.c_wep.settings.clip_size() - state.wep.m_iClip;
+		int clipNeeded = clip_size - clip;
 		int reloadAmt = Math.min(clipNeeded, ammoLeft);
 		plr.m_rgAmmo(ammoType, ammoLeft-reloadAmt);
-		state.wep.m_iClip += reloadAmt;
-		state.reloading = 0;
-	}	
+		if (reloadedSecondary)
+			state.wep.m_iClip2 += reloadAmt;
+		else
+			state.wep.m_iClip += reloadAmt;
+		state.reloading = state.reloading2 = 0;
+	}
 	
 	bool monitorBeams = false;
 	for (int i = 0; i < int(state.ubeams.length()); i++)
@@ -922,8 +931,11 @@ bool EmptyShoot(WeaponState& state)
 	// TODO: Monster ammo
 	if (state.user.IsPlayer())
 	{
-		return (state.c_wep.settings.clip_size() > 0 and state.wep.m_iClip == 0) or 
-				(state.c_wep.settings.clip_size() == 0 and AmmoLeft(state, state.active_ammo_type) == 0);
+		int clip_size = state.active_opts.isPrimary() ? state.c_wep.settings.clip_size() : state.c_wep.settings.clip_size2;
+		int clip = state.active_opts.isPrimary() ? state.wep.m_iClip : state.wep.m_iClip2;
+		
+		return ((clip_size > 0 and clip == 0) or 
+				(clip_size == 0 and AmmoLeft(state, state.active_ammo_type) == 0));
 	}
 	return false;
 }
@@ -963,8 +975,11 @@ void DepleteAmmo(WeaponState& state, int amt)
 	{
 		CBasePlayer@ plr = cast<CBasePlayer@>(attacker);
 		bool shouldUseClip = state.active_opts.isPrimary() or state.active_ammo_type == state.wep.m_iPrimaryAmmoType;
+		bool shouldUseClip2 = state.active_opts.isSecondary() or state.active_ammo_type == state.wep.m_iSecondaryAmmoType;
 		if (state.wep.m_iClip > 0 and shouldUseClip) 
 			state.wep.m_iClip -= amt;
+		else if (state.wep.m_iClip2 > 0 and shouldUseClip2)
+			state.wep.m_iClip2 -= amt;
 		else // gun doesn't use a clip
 			plr.m_rgAmmo( state.active_ammo_type, Math.max(0, AmmoLeft(state, state.active_ammo_type)-amt));
 			
@@ -1904,16 +1919,31 @@ bool AllowedToShoot(WeaponState& state, weapon_custom_shoot@ opts)
 			
 		if (ammoType != -1) // ammo used at all?
 		{
+			bool shootingPrimary = opts.isPrimary() or ammoType == state.wep.m_iPrimaryAmmoType;
+			bool shootingSecondary = opts.isSecondary() or ammoType == state.wep.m_iSecondaryAmmoType;
 			bool partialAmmoShoot = (opts.pev.spawnflags & FL_SHOOT_PARTIAL_AMMO_SHOOT) != 0;
-			bool shouldUseClip = state.c_wep.settings.clip_size() > 0 and (opts.isPrimary() or ammoType == state.wep.m_iPrimaryAmmoType);
-			bool emptyClip = (state.c_wep.settings.clip_size() > 0 and state.wep.m_iClip < opts.ammo_cost);
+			bool shouldUseClip = 
+			(state.c_wep.settings.clip_size() > 0 and shootingPrimary) or
+			(state.c_wep.settings.clip_size2 > 0 and shootingSecondary);
+			bool emptyClip = 
+			(state.c_wep.settings.clip_size() > 0 and state.wep.m_iClip < opts.ammo_cost and shootingPrimary) or
+			(state.c_wep.settings.clip_size2 > 0 and state.wep.m_iClip2 < opts.ammo_cost and shootingSecondary);
 			bool emptyAmmo = AmmoLeft(state, ammoType) < opts.ammo_cost;
-			emptyClip = emptyClip and (!partialAmmoShoot or state.wep.m_iClip <= 0);
+			if (shootingPrimary)
+				emptyClip = emptyClip and (!partialAmmoShoot or state.wep.m_iClip <= 0);
+			if (shootingSecondary)
+				emptyClip = emptyClip and (!partialAmmoShoot or state.wep.m_iClip2 <= 0);
 			emptyAmmo = emptyAmmo and (!partialAmmoShoot or AmmoLeft(state, ammoType) <= 0);
 			if ((emptyClip and shouldUseClip) or (!shouldUseClip and emptyAmmo))
 			{
 				emptySound = true;
 				canshoot = false;
+				if (opts.isSecondary() and !emptyAmmo)
+				{
+					emptySound = false;
+					state.reloadSecondary = true;
+					state.c_wep.Reload();
+				}
 			}
 		}
 
