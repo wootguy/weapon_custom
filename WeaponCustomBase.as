@@ -57,15 +57,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 
 	bool AddWeapon()
 	{
-		if (shouldRespawn and (pev.spawnflags & FL_DISABLE_RESPAWN) == 0)
-		{
-			CBaseEntity@ ent = g_EntityFuncs.Create(settings.weapon_classname, pev.origin, pev.angles, false); 
-			g_SoundSystem.EmitSoundDyn( ent.edict(), CHAN_ITEM, "items/suitchargeok1.wav", 1.0, 
-														ATTN_NORM, 0, 150 );
-			WeaponCustomBase@ wep = cast<WeaponCustomBase@>(CastToScriptClass(ent));
-			wep.shouldRespawn = true; // respawn this one, too
-		}
-		
 		bool wasUsed = used;
 		used = false;
 		return pev.spawnflags & FL_USE_ONLY == 0 or wasUsed;
@@ -81,7 +72,30 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			if (@plr.HasNamedPlayerItem(self.pev.classname) == null)
 			{
 				used = true; // allow pickups for time frame
-				self.Collect(pActivator);
+				
+				//self.Collect(pActivator); // causes crashes :<
+				plr.SetItemPickupTimes(0);
+				plr.GiveNamedItem(self.pev.classname);
+				CBasePlayerWeapon@ givenItem = cast<CBasePlayerWeapon>(plr.HasNamedPlayerItem(self.pev.classname));
+				if (givenItem !is null) {
+					givenItem.m_iClip = self.m_iClip;
+					givenItem.m_iClip2 = self.m_iClip2;
+					
+					self.ExtractAmmo(givenItem);
+					//givenItem.ExtractClipAmmo(self);
+						
+					
+					if (shouldRespawn and (pev.spawnflags & FL_DISABLE_RESPAWN) == 0)
+					{
+						CBaseEntity@ ent = g_EntityFuncs.Create(settings.weapon_classname, pev.origin, pev.angles, false); 
+						g_SoundSystem.EmitSoundDyn( ent.edict(), CHAN_ITEM, "items/suitchargeok1.wav", 1.0, 
+																	ATTN_NORM, 0, 150 );
+						WeaponCustomBase@ wep = cast<WeaponCustomBase@>(CastToScriptClass(ent));
+						wep.shouldRespawn = true; // respawn this one, too
+					}
+					
+					g_Scheduler.SetTimeout("delay_remove", 0, EHandle(self)); // removing now would cause a crash
+				}
 			}
 		}
 	}
@@ -303,8 +317,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	CBasePlayerItem@ DropItem()
 	{
 		CBasePlayer@ plr = getPlayer();
-		plr.pev.maxspeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
-		baseMoveSpeed = -1;
+		
 		//self.pev.body = 3;
 		//self.pev.sequence = 8;
 		shouldRespawn = false;
@@ -314,6 +327,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		//println("LE DROP ITEM");
 		plr.RemovePlayerItem(self);
+		baseMoveSpeed = -1;
 		
 		return self;
 	}
@@ -359,7 +373,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		for (uint i = 0; i < state.ubeams.length(); i++)
 			g_EntityFuncs.Remove(state.ubeams[i]);
 		
-		plr.pev.maxspeed = baseMoveSpeed;
+		plr.pev.maxspeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
 			plr.pev.fuser4 = 0;
 	}
