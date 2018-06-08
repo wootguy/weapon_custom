@@ -1489,6 +1489,11 @@ void delayed_bubbles(Vector mins, Vector maxs, float height, string spr, int cou
 	te_bubbles(mins, maxs, height, spr, count, speed);
 }
 
+void delay_remove(EHandle ent)
+{
+	g_EntityFuncs.Remove(ent);
+}
+
 void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ shoot_opts)
 {
 	ProjectileOptions@ options = shoot_opts.projectile;
