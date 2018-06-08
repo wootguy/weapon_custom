@@ -208,6 +208,51 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		}
 	}
 	
+	bool CustomCanDeploy() 
+	{
+		bool bHasAmmo = false;
+		CBasePlayer@ plr = getPlayer();
+		
+		if ( self.m_iPrimaryAmmoType == -1 or self.pev.spawnflags & FL_WEP_SELECTONEMPTY != 0 or true)
+		{
+			// this weapon doesn't use ammo, can always deploy.
+			return true;
+		}
+
+		if ( self.m_iPrimaryAmmoType != -1 )
+		{
+			bHasAmmo = bHasAmmo or (plr.m_rgAmmo(self.m_iPrimaryAmmoType) != 0);
+		}
+		if ( self.m_iSecondaryAmmoType != -1 )
+		{
+			bHasAmmo = bHasAmmo or (plr.m_rgAmmo(self.m_iSecondaryAmmoType) != 0);
+		}
+		if (self.m_iClip > 0)
+		{
+			bHasAmmo = true;
+		}
+
+		return bHasAmmo;
+	}
+	
+	bool CustomDeploy( string szViewModel, string szWeaponModel, int iAnim, string szAnimExt, int skiplocal, int body )
+	{
+		if ( !CustomCanDeploy() )
+			return false;
+
+		CBasePlayer@ plr = getPlayer();
+		
+		plr.pev.viewmodel = szViewModel;
+		plr.pev.weaponmodel = szWeaponModel;
+		plr.set_m_szAnimExtension(szAnimExt);
+		
+		self.SendWeaponAnim( iAnim, skiplocal, body );
+
+		plr.m_flNextAttack = 0.5;
+		self.m_flTimeWeaponIdle = 1.0;
+		return true;
+	}
+	
 	bool Deploy(bool skipDelay)
 	{
 		CBasePlayer@ plr = getPlayer();
@@ -227,7 +272,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		// body not used until weapon dropped
 		
-		bool ret = self.DefaultDeploy( self.GetV_Model( v_mod ), self.GetP_Model( p_mod ), 
+		bool ret = CustomDeploy( self.GetV_Model( v_mod ), self.GetP_Model( p_mod ), 
 								   settings.deploy_anim, settings.getPlayerAnimExt(), 0, w_body() );
 		
 		g_EntityFuncs.SetModel( self, w_mod );
