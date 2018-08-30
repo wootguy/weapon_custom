@@ -359,7 +359,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			plr.pev.fuser4 = 1;
 	}
 	
-	CBasePlayerItem@ DropItem()
+	void Kill()
 	{
 		CBasePlayer@ plr = getPlayer();
 		
@@ -373,8 +373,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		//println("LE DROP ITEM");
 		plr.RemovePlayerItem(self);
 		baseMoveSpeed = -1;
-		
-		return self;
 	}
 	
 	void Holster(int iSkipLocal = 0) 
