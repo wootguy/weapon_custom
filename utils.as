@@ -933,13 +933,21 @@ void custom_effect(Vector pos, weapon_custom_effect@ effect, EHandle creator, EH
 		int l_life = int(effect.explode_light_adv.y);
 		int l_decay = int(effect.explode_light_adv.z);
 		if (l_size > 0 and l_life > 0)
+		{
 			te_dlight(pos, l_size, effect.explode_light_color, l_life, l_decay);
+			if (creator.IsValid())
+				te_elight(creator, pos, l_size*10, effect.explode_light_color, l_life, l_decay);
+		}
 			
 		int l_size2 = int(effect.explode_light_adv2.x);
 		int l_life2 = int(effect.explode_light_adv2.y);
 		int l_decay2 = int(effect.explode_light_adv2.z);
 		if (l_size2 > 0)
+		{
 			te_dlight(pos, l_size2, effect.explode_light_color2, l_life2, l_decay2);
+			if (creator.IsValid())
+				te_elight(creator, pos, l_size2*10, effect.explode_light_color2, l_life2, l_decay2);
+		}
 	}
 	if (effect.pev.spawnflags & FL_EFFECT_SPARKS != 0)
 	{
@@ -2236,5 +2244,6 @@ void te_teleport(Vector pos, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ 
 void te_implosion(Vector pos, uint8 radius=255, uint8 count=32, uint8 life=5, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null){NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_IMPLOSION);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteByte(radius);m.WriteByte(count);m.WriteByte(life);m.End();}
 void te_playersprites(CBasePlayer@ target, string sprite="sprites/bubble.spr", uint8 count=16, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_PLAYERSPRITES);m.WriteShort(target.entindex());m.WriteShort(g_EngineFuncs.ModelIndex(sprite));m.WriteByte(count);m.WriteByte(0);m.End();}
 void te_bloodstream(Vector pos, Vector dir, uint8 color=70, uint8 speed=64, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) { NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_BLOODSTREAM);m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteCoord(dir.x);m.WriteCoord(dir.y);m.WriteCoord(dir.z);m.WriteByte(color);m.WriteByte(speed);m.End();}
+void te_elight(CBaseEntity@ target, Vector pos, float radius=1024.0f, Color c=PURPLE, uint8 life=16, float decayRate=2000.0f, NetworkMessageDest msgType=MSG_BROADCAST, edict_t@ dest=null) {NetworkMessage m(msgType, NetworkMessages::SVC_TEMPENTITY, dest);m.WriteByte(TE_ELIGHT);m.WriteShort(target.entindex());m.WriteCoord(pos.x);m.WriteCoord(pos.y);m.WriteCoord(pos.z);m.WriteCoord(radius);m.WriteByte(c.r);m.WriteByte(c.g);m.WriteByte(c.b);m.WriteByte(life);m.WriteCoord(decayRate);m.End();}
 
 }

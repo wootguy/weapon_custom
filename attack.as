@@ -804,6 +804,8 @@ void AttackEffects(WeaponState& state, bool windupAttack=false)
 	{
 		Vector lpos = attacker.pev.origin + g_Engine.v_forward * 50;
 		te_dlight(lpos, flash_size, flash_color, flash_life, flash_decay);
+		if (attacker !is null)
+			te_elight(attacker, lpos, flash_size*10, flash_color, flash_life, flash_decay);
 	}
 	
 	if (noSndOverlap)
