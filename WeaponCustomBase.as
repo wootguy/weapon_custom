@@ -73,29 +73,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			{
 				used = true; // allow pickups for time frame
 				
-				//self.Collect(pActivator); // causes crashes :<
-				plr.SetItemPickupTimes(0);
-				plr.GiveNamedItem(self.pev.classname);
-				CBasePlayerWeapon@ givenItem = cast<CBasePlayerWeapon>(plr.HasNamedPlayerItem(self.pev.classname));
-				if (givenItem !is null) {
-					givenItem.m_iClip = self.m_iClip;
-					givenItem.m_iClip2 = self.m_iClip2;
-					
-					self.ExtractAmmo(givenItem);
-					//givenItem.ExtractClipAmmo(self);
-						
-					
-					if (shouldRespawn and (pev.spawnflags & FL_DISABLE_RESPAWN) == 0)
-					{
-						CBaseEntity@ ent = g_EntityFuncs.Create(settings.weapon_classname, pev.origin, pev.angles, false); 
-						g_SoundSystem.EmitSoundDyn( ent.edict(), CHAN_ITEM, "items/suitchargeok1.wav", 1.0, 
-																	ATTN_NORM, 0, 150 );
-						WeaponCustomBase@ wep = cast<WeaponCustomBase@>(CastToScriptClass(ent));
-						wep.shouldRespawn = true; // respawn this one, too
-					}
-					
-					g_Scheduler.SetTimeout("delay_remove", 0, EHandle(self)); // removing now would cause a crash
-				}
+				// touching or Collect() now would cause a crash
+				g_Scheduler.SetTimeout("delay_touch", 0.0f, EHandle(self), EHandle(pCaller));
 			}
 		}
 	}
@@ -189,6 +168,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					pPlayer.m_rgAmmo(ammoType, ammoLeft + self.m_iDefaultAmmo);
 				}
 			}
+			
+			self.ExtractAmmo(self);
+			//self.ExtractClipAmmo(self);
+			
 			return true;
 		}
 		return false;
@@ -362,15 +345,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	void Kill()
 	{
 		CBasePlayer@ plr = getPlayer();
-		
-		//self.pev.body = 3;
-		//self.pev.sequence = 8;
 		shouldRespawn = false;
-		
-		//CBaseEntity@ ent = cast<CBaseEntity@>(self);
-		//monitorWeaponbox(@ent);
-		
-		//println("LE DROP ITEM");
 		plr.RemovePlayerItem(self);
 		baseMoveSpeed = -1;
 	}
