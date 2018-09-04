@@ -1502,6 +1502,12 @@ void delay_remove(EHandle ent)
 	g_EntityFuncs.Remove(ent);
 }
 
+void delay_touch(EHandle ent, EHandle toucher)
+{
+	if (ent.IsValid() and toucher.IsValid())
+		ent.GetEntity().Touch(toucher);
+}
+
 void killProjectile(EHandle projectile, EHandle sprite, weapon_custom_shoot@ shoot_opts)
 {
 	ProjectileOptions@ options = shoot_opts.projectile;
