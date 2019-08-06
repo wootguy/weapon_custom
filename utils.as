@@ -1404,7 +1404,7 @@ void custom_user_effect(EHandle h_plr, EHandle h_wep, weapon_custom_user_effect@
 		plr.ShowOverheadSprite(effect.action_sprite, effect.action_sprite_height, effect.action_sprite_time);
 	
 	// firstperson anim
-	if (h_wep and wep !is null and plrEnt.IsAlive() and plrEnt.IsPlayer())
+	if (h_wep and wep !is null and plrEnt.IsAlive() and plrEnt.IsPlayer() and wep.pev.owner !is null)
 	{
 		if (effect.v_model.Length() > 0 or effect.p_model.Length() > 0 or effect.w_model.Length() > 0 or effect.w_model_body >= 0)
 		{
