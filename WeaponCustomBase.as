@@ -394,6 +394,8 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		plr.pev.maxspeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
 			plr.pev.fuser4 = 0;
+			
+		BaseClass.Holster(iSkipLocal);
 	}
 	
 	float WeaponTimeBase()
