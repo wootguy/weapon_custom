@@ -30,6 +30,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	
 	bool shouldRespawn = false;
 	
+	// when you cheat and give yourself a weapon, you get some extra ammo with it. Enabling this before spawning the
+	// weapon will prevent that (used in the rust maps to prevent ammo duplication)
+	bool shouldBypassAmmoExtraction = false;
+	
 	void Spawn()
 	{
 		if (settings is null) {
@@ -169,8 +173,18 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				}
 			}
 			
-			self.ExtractAmmo(self);
-			//self.ExtractClipAmmo(self);
+			int oldClip = self.m_iClip;
+			
+			if (!shouldBypassAmmoExtraction)
+				self.ExtractAmmo(self); // fix for losing half ammo when touching/using a dropped weapon
+			
+			// Fix for weird bug that places half of the held ammo into the clip, if given a weapon with an empty clip.
+			// If this is always done, then all given weapons will have empty clips.
+			if (oldClip == 0) {
+				self.ExtractClipAmmo(self);
+			}
+			
+			shouldBypassAmmoExtraction = false; // only do this once to prevent losing ammo after dropping a newly spawned weapon
 			
 			return true;
 		}
