@@ -171,20 +171,22 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 					int ammoLeft = pPlayer.m_rgAmmo(ammoType);
 					pPlayer.m_rgAmmo(ammoType, ammoLeft + self.m_iDefaultAmmo);
 				}
+			} else {
+				int oldClip = self.m_iClip;
+			
+				if (!shouldBypassAmmoExtraction)
+					self.ExtractAmmo(self); // fix for losing half ammo when touching/using a dropped weapon
+				
+				// Fix for weird bug that places half of the held ammo into the clip, if given a weapon with an empty clip.
+				// If this is always done, then all given weapons will have empty clips.
+				if (oldClip == 0) {				
+					self.ExtractClipAmmo(self);
+				}
+				
+				shouldBypassAmmoExtraction = false; // only do this once to prevent losing ammo after dropping a newly spawned weapon
 			}
 			
-			int oldClip = self.m_iClip;
 			
-			if (!shouldBypassAmmoExtraction)
-				self.ExtractAmmo(self); // fix for losing half ammo when touching/using a dropped weapon
-			
-			// Fix for weird bug that places half of the held ammo into the clip, if given a weapon with an empty clip.
-			// If this is always done, then all given weapons will have empty clips.
-			if (oldClip == 0) {
-				self.ExtractClipAmmo(self);
-			}
-			
-			shouldBypassAmmoExtraction = false; // only do this once to prevent losing ammo after dropping a newly spawned weapon
 			
 			return true;
 		}
@@ -408,8 +410,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		plr.pev.maxspeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
 			plr.pev.fuser4 = 0;
-			
-		BaseClass.Holster(iSkipLocal);
 	}
 	
 	float WeaponTimeBase()
