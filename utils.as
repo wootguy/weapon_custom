@@ -755,11 +755,11 @@ class WeaponCustomProjectile : ScriptBaseAnimating
 			// set both classes in case this a pvp map where classes are always changing
 			int oldClass1 = owner.GetClassification(0);
 			int oldClass2 = ent.GetClassification(0);
-			owner.SetClassification(CLASS_PLAYER);
-			ent.SetClassification(CLASS_ALIEN_MILITARY);
+			owner.KeyValue("classify", CLASS_PLAYER);
+			ent.KeyValue("classify", CLASS_ALIEN_MILITARY);
 			g_WeaponFuncs.ApplyMultiDamage(owner.pev, owner.pev);
-			owner.SetClassification(oldClass1);
-			ent.SetClassification(oldClass2);
+			owner.KeyValue("classify", oldClass1);
+			ent.KeyValue("classify", oldClass2);
 		}
 		else
 			g_WeaponFuncs.ApplyMultiDamage(owner.pev, owner.pev);
@@ -1133,16 +1133,16 @@ void custom_explosion(Vector pos, Vector vel, weapon_custom_effect@ effect, Vect
 				{
 					victims.insertLast(victim);
 					oldClassify.insertLast(victim.GetClassification(0));
-					victim.SetClassification(CLASS_ALIEN_MILITARY);
+					victim.KeyValue("classify", CLASS_ALIEN_MILITARY);
 				}
 			} while (victim !is null);
 			
-			ownerEnt.SetClassification(CLASS_PLAYER);
+			ownerEnt.KeyValue("classify", CLASS_PLAYER);
 			
 			RadiusDamage(pos, ownerEnt.pev, ownerEnt.pev, dmg, radius, 0, effect.damageType());
 			
 			for (uint i = 0; i < victims.length(); i++)
-				victims[i].SetClassification(oldClassify[i]);
+				victims[i].KeyValue("classify", oldClassify[i]);
 		}
 		else
 		{
