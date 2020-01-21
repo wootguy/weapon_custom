@@ -2097,13 +2097,13 @@ bool AttackMonster(WeaponState& state, Vector vecSrc, TraceResult tr)
 			// set both classes in case this a pvp map where classes are always changing
 			int oldClass1 = attacker.GetClassification(0);
 			int oldClass2 = ent.GetClassification(0);
-			attacker.SetClassification(CLASS_PLAYER);
-			ent.SetClassification(CLASS_ALIEN_MILITARY);
+			attacker.KeyValue("classify", CLASS_PLAYER);
+			ent.KeyValue("classify", CLASS_ALIEN_MILITARY);
 			
 			g_WeaponFuncs.ApplyMultiDamage(attacker.pev, attacker.pev);
 			
-			attacker.SetClassification(oldClass1);
-			ent.SetClassification(oldClass2);
+			attacker.KeyValue("classify", oldClass1);
+			ent.KeyValue("classify", oldClass2);
 		}
 		else
 			g_WeaponFuncs.ApplyMultiDamage(attacker.pev, attacker.pev);
