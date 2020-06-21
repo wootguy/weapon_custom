@@ -29,10 +29,19 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	bool used = false; // set to true if the weapon has just been +USEd
 	
 	bool shouldRespawn = false;
+	float m_flCustomRespawnTime = 0.0f;
 	
 	// when you cheat and give yourself a weapon, you get some extra ammo with it. Enabling this before spawning the
 	// weapon will prevent that (used in the rust maps to prevent ammo duplication)
 	bool shouldBypassAmmoExtraction = false;
+	
+	bool KeyValue( const string& in szKey, const string& in szValue )
+	{
+		if (szKey == "m_flCustomRespawnTime") m_flCustomRespawnTime = atof(szValue);
+		else return BaseClass.KeyValue( szKey, szValue );
+		
+		return true;
+	}
 	
 	void Spawn()
 	{
@@ -80,6 +89,19 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 				// touching or Collect() now would cause a crash
 				g_Scheduler.SetTimeout("delay_touch", 0.0f, EHandle(self), EHandle(pCaller));
 			}
+		}
+	}
+	
+	void Touch( CBaseEntity@ pOther )
+	{
+		CBasePlayer@ plr = cast<CBasePlayer@>(pOther);
+		bool oldHadWep = plr !is null && @plr.HasNamedPlayerItem(self.pev.classname) != null;
+		
+		BaseClass.Touch(pOther);
+		
+		bool nowHasWep = plr !is null && @plr.HasNamedPlayerItem(self.pev.classname) != null;
+		if (!oldHadWep and nowHasWep and shouldRespawn and (pev.spawnflags & FL_DISABLE_RESPAWN) == 0) {
+			g_Scheduler.SetTimeout("delay_respawn", m_flCustomRespawnTime, settings.weapon_classname, pev.origin, pev.angles);
 		}
 	}
 	
@@ -816,6 +838,13 @@ class AmmoCustomBase : ScriptBasePlayerAmmoEntity
 		}
 		return false;
 	}
+}
+
+void delay_respawn(string classname, Vector pos, Vector angles) {
+	CBaseEntity@ ent = g_EntityFuncs.Create(classname, pos, angles, false); 
+	g_SoundSystem.EmitSoundDyn( ent.edict(), CHAN_ITEM, "items/suitchargeok1.wav", 1.0, ATTN_NORM, 0, 150 );
+	WeaponCustomBase@ wep = cast<WeaponCustomBase@>(CastToScriptClass(ent));
+	wep.shouldRespawn = true; // respawn this one, too
 }
 
 }
