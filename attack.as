@@ -312,7 +312,7 @@ void AttackThink(WeaponState& state)
 			state.canShootAgain = true;
 		}	
 	}
-	else if (!state.laser_spr and !state.needShellEject and state.reloading == 0 and !monitorBeams)
+	else if (!state.laser_spr and !state.needShellEject and state.reloading == 0 and state.reloading2 == 0 and !monitorBeams)
 		return;
 	setNextAttackThink(state, g_Engine.time);
 }
@@ -854,6 +854,7 @@ void AttackEffects(WeaponState& state, bool windupAttack=false)
 void DoAttack(WeaponState& state, bool windupAttack=false)
 {	
 	state.reloading = 0;
+	state.reloading2 = 0;
 	state.healedTarget = false;
 	state.abortAttack = false;
 	state.partialAmmoUsage = -1;
@@ -1866,7 +1867,7 @@ bool CanStartAttack(WeaponState& state, weapon_custom_shoot@ opts)
 		return false;
 	}
 		
-	if (state.windingUp or state.reloading != 0)
+	if (state.windingUp or state.reloading != 0 or state.reloading2 != 0)
 	{
 		state.windupHeld = true;
 		state.lastWindupHeld = g_Engine.time;
