@@ -410,6 +410,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		CancelBeam(state);
 		
 		state.reloading = 0;
+		state.reloading2 = 0;
 		
 		state.windingUp = false;
 		state.windupLoopEntered = false;
