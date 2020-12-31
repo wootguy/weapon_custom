@@ -24,8 +24,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 	string w_model_override;
 	int w_model_body_override = -1;
 	
-	float baseMoveSpeed = -1; // reset to this after dropping weapon
-	
 	bool used = false; // set to true if the weapon has just been +USEd
 	
 	bool shouldRespawn = false;
@@ -215,20 +213,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		return false;
 	}
 	
-	void updateBaseMoveSpeed()
-	{
-		CBasePlayer@ plr = getPlayer();
-		if (baseMoveSpeed < 0)
-		{
-			baseMoveSpeed = plr.pev.maxspeed;
-			if (baseMoveSpeed <= 0)
-			{
-				// 0 = use default speed. So, just set the default speed so the multiplier works.
-				baseMoveSpeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
-			}
-		}
-	}
-	
 	bool CustomCanDeploy() 
 	{
 		bool bHasAmmo = false;
@@ -304,8 +288,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 			state.deployTime = g_Engine.time;
 		}
 		
-		updateBaseMoveSpeed();
-		
 		settings.deploy_snd.play(plr, CHAN_VOICE);
 		
 		// set max ammo counts for custom ammo
@@ -364,17 +346,13 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		if (!plr.m_hActiveItem.IsValid() or string(plr.m_hActiveItem.GetEntity().pev.classname) != string(pev.classname))
 			return;
 		
-		updateBaseMoveSpeed();
-		
 		float mult = settings.movespeed;
 		if (state.windingUp and !state.windingDown and !state.windupShooting)
 			mult *= state.active_opts.windup_movespeed;
 		if (state.windupShooting)
 			mult *= state.active_opts.windup_shoot_movespeed;
-			
-		plr.pev.maxspeed = baseMoveSpeed*mult;
-		if (plr.pev.maxspeed == 0)
-			plr.pev.maxspeed = 0.000000001; // 0 just resets to default
+		
+		plr.SetMaxSpeedOverride(int(plr.GetMaxSpeed()*mult));
 		
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
 			plr.pev.fuser4 = 1;
@@ -385,7 +363,6 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		CBasePlayer@ plr = getPlayer();
 		shouldRespawn = false;
 		plr.RemovePlayerItem(self);
-		baseMoveSpeed = -1;
 	}
 	
 	void Holster(int iSkipLocal = 0) 
@@ -430,7 +407,7 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		for (uint i = 0; i < state.ubeams.length(); i++)
 			g_EntityFuncs.Remove(state.ubeams[i]);
 		
-		plr.pev.maxspeed = g_EngineFuncs.CVarGetPointer( "sv_maxspeed" ).value;
+		plr.SetMaxSpeedOverride(-1);
 		if (settings.pev.spawnflags & FL_WEP_NO_JUMP != 0)
 			plr.pev.fuser4 = 0;
 	}
