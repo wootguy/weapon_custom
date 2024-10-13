@@ -63,6 +63,10 @@ class WeaponCustomBase : ScriptBasePlayerWeaponEntity
 		
 		self.m_bExclusiveHold = settings.pev.spawnflags & FL_WEP_EXCLUSIVE_HOLD != 0;
 		
+		int idleSeq = self.LookupActivity(ACT_IDLE);
+		pev.sequence = idleSeq != -1 ? idleSeq : 0;
+		self.ResetSequenceInfo();
+		
 		shouldRespawn = true; // flag for respawning
 	}
 
